@@ -23,6 +23,7 @@
     { id: "snacks", label: "Snacks" },
   ];
   const OZ = 28.3495;
+  const GLASS_OZ = 8; // one glass of water, in fluid ounces
   const STORE_KEY = "nutrilog:v1";
   const DEFAULT_GOALS = { kcal: 2000, pro: 100, carb: 250, fat: 70, fib: 28, sug: 50, sat: 20, chol: 300, na: 2300 };
   // "Limit" nutrients turn red when exceeded; others are targets to reach.
@@ -288,10 +289,11 @@
   function renderWater() {
     const n = state.water[currentDay] || 0;
     const goal = state.waterGoal || 8;
-    const total = Math.max(goal, n + 1);
+    const goalGlasses = Math.ceil(goal);
+    const total = Math.max(goalGlasses, n + 1);
     $("#glasses").innerHTML = Array.from({ length: total }, (_, i) =>
       `<button class="glass${i < n ? " full" : ""}" data-glass="${i}" aria-label="${i < n ? "Remove" : "Add"} glass ${i + 1}"></button>`).join("");
-    $("#water-count").textContent = `${n} of ${goal} glasses`;
+    $("#water-count").textContent = `${n} of ${round(goal, 1)} glasses · ${n * GLASS_OZ} of ${Math.round(goal * GLASS_OZ)} fl oz`;
   }
   $("#glasses").addEventListener("click", (e) => {
     const b = e.target.closest("[data-glass]");
@@ -939,12 +941,22 @@
     `<label class="field"><span>${n.label} (${n.unit})</span><input type="number" min="0" step="any" id="g-${n.key}"></label>`).join("");
   function fillGoals() {
     for (const k of NK) $("#g-" + k).value = round(state.goals[k], 0);
-    $("#goal-water").value = state.waterGoal;
+    $("#goal-water").value = round(state.waterGoal, 1);
+    $("#goal-water-oz").value = Math.round(state.waterGoal * GLASS_OZ);
   }
+  $("#goal-water-oz").addEventListener("input", (e) => {
+    const oz = Number(e.target.value);
+    if (oz > 0) $("#goal-water").value = round(oz / GLASS_OZ, 1);
+  });
+  $("#goal-water").addEventListener("input", (e) => {
+    const g = Number(e.target.value);
+    if (g > 0) $("#goal-water-oz").value = Math.round(g * GLASS_OZ);
+  });
   $("#goals-form").addEventListener("submit", (e) => {
     e.preventDefault();
     for (const k of NK) { const v = Number($("#g-" + k).value); if (v >= 0) state.goals[k] = v; }
-    state.waterGoal = Math.max(1, Number($("#goal-water").value) || 8);
+    const oz = Number($("#goal-water-oz").value);
+    state.waterGoal = oz > 0 ? Math.max(1, oz / GLASS_OZ) : 8;
     save();
     renderToday();
     $("#goals-msg").textContent = "Targets saved.";
