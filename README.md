@@ -10,6 +10,7 @@ A food nutrition facts calculator and daily intake tracker. It runs entirely in 
 - **History**: calories per day for the last 7, 14 or 30 days against your goal, plus averages and a per-day table.
 - **Goals**: set daily targets, or estimate them from age, sex, height, weight and activity (Mifflin-St Jeor).
 - **Food search**: about 120 common foods built in (values per 100 g, approximated from USDA FoodData Central), searchable by name and category. Amounts can be entered in servings, grams or ounces. Packaged foods can be searched online through [Open Food Facts](https://world.openfoodfacts.org/).
+- **Log from photo** (hosted on claude.ai only): take or choose a photo of a meal and Claude estimates each item's portion and nutrients. Untick or resize items before adding them.
 - **Backup**: export all data as JSON and restore it on another device.
 
 On first open, the app loads a sample day so you can see how it works. Remove those entries, or use **Goals → Erase all data**, to start fresh.
@@ -34,7 +35,7 @@ To host it, enable GitHub Pages for this repository (Settings → Pages → depl
 | `foods.js` | Built-in food database |
 | `app.js` | App logic: logging, calculator, label, history, goals, storage |
 
-Data is saved in the browser's `localStorage`, so it stays on the device and browser you use.
+Opened as plain files, data is saved in the browser's `localStorage`, so it stays on that device and browser. When hosted as a claude.ai artifact, data is saved in the artifact's database instead (one document per day under `days/`, settings in `config/main`), so it syncs across your devices and entries Claude adds from chat show up live.
 
 ## Notes
 

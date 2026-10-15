@@ -92,12 +92,50 @@
     if (typeof out.water !== "object" || !out.water) out.water = {};
     return out;
   }
+  // Two storage backends: localStorage when opened as plain files, and the artifact's
+  // database when hosted on claude.ai (so entries added from chat show up live).
+  // In db mode each day is one document `days/<YYYY-MM-DD>` and settings live in `config/main`.
+  const store = { mode: window.claude && typeof window.claude.use === "function" ? "pending" : "local", db: null, written: new Map(), timer: null, chain: Promise.resolve() };
+  const canon = (v) => JSON.stringify(v, (k, x) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map((kk) => [kk, x[kk]])) : x));
+  const dayBody = (k) => ({ entries: state.log[k] || [], water: state.water[k] || 0 });
+  const configBody = () => ({ goals: state.goals, waterGoal: state.waterGoal, custom: state.custom, recent: state.recent, draft: state.draft });
+
   function save() {
+    if (store.mode === "db") {
+      clearTimeout(store.timer);
+      store.timer = setTimeout(flushDb, 300);
+      return;
+    }
+    if (store.mode !== "local") return;
     try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
   }
+  function flushDb() {
+    const writes = [];
+    const days = new Set([...Object.keys(state.log), ...Object.keys(state.water)]);
+    for (const p of store.written.keys()) if (p.startsWith("days/")) days.add(p.slice(5));
+    for (const k of days) {
+      const path = "days/" + k;
+      const body = dayBody(k);
+      const empty = !body.entries.length && !body.water;
+      const prev = store.written.get(path);
+      if (empty) {
+        if (prev !== undefined) { store.written.delete(path); writes.push(() => store.db.doc(path).delete()); }
+      } else {
+        const c = canon(body);
+        if (c !== prev) { store.written.set(path, c); writes.push(() => store.db.doc(path).set(JSON.parse(JSON.stringify(body)))); }
+      }
+    }
+    const cb = configBody();
+    const cc = canon(cb);
+    if (cc !== store.written.get("config/main")) { store.written.set("config/main", cc); writes.push(() => store.db.doc("config/main").set(JSON.parse(JSON.stringify(cb)))); }
+    // One write at a time, in order
+    for (const w of writes) {
+      store.chain = store.chain.then(w).catch((e) => toast(e && e.code === "quota_exceeded" ? "Storage is full. Delete old days to keep saving." : "Couldn't save that change. Check your connection."));
+    }
+  }
 
-  let state = load();
-  const firstRun = !state;
+  let state = store.mode === "local" ? load() : null;
+  const firstRun = store.mode === "local" && !state;
   if (!state) state = defaultState();
 
   // ---------- Food lookup ----------
@@ -312,14 +350,14 @@
       amount: Number(amount),
       unit,
       grams,
-      amountText: unitText(food, amount, unit) + (unit === "g" ? "" : ` (${Math.round(grams)} g)`),
+      amountText: unit === "g" ? unitText(food, amount, unit) : unitText(food, amount, unit).replace(/\s*\([^)]*\d\s*g\)/g, "") + ` (${Math.round(grams)} g)`,
       n: scale(food.per100, grams),
     };
     const list = state.log[day] || (state.log[day] = []);
     const idx = editId ? list.findIndex((x) => x.id === editId) : -1;
     if (idx >= 0) list[idx] = entry; else list.push(entry);
     if (food.source === "off") onlineCache.set(food.id, food);
-    else if (food.source !== "recipe-log") pushRecent(food);
+    else if (food.source !== "recipe-log" && food.source !== "photo") pushRecent(food);
     save();
     return entry;
   }
@@ -1026,6 +1064,141 @@
     dataMsg("All data erased.");
   });
 
+  // ---------- Photo estimate (hosted on claude.ai only) ----------
+  const PHOTO_PROMPT = (note) => `You are estimating nutrition from photos of food someone ate.
+Identify each distinct food or drink you can see and estimate the portion shown.
+${note ? `The person adds: "${note}"\n` : ""}Reply with only JSON in this shape:
+{"items":[{"name":"Grilled chicken breast","portion":"about 1 piece (150 g)","grams":150,"kcal":248,"pro":46.5,"carb":0,"fat":5.4,"fib":0,"sug":0,"sat":1.5,"chol":128,"na":111}],"note":"one short sentence about confidence or assumptions"}
+Rules: values are totals for the portion shown, not per 100 g. kcal in kcal; pro, carb, fat, fib, sug, sat in grams; chol and na (sodium) in milligrams.
+Include visible sauces, dressings, oils and drinks as their own items. Use typical USDA values. If there is no food in the photo, return {"items":[],"note":"..."}.`;
+
+  let photoItems = [];
+  async function setupPhoto() {
+    if (!window.claude || typeof window.claude.use !== "function") return;
+    let sample = null;
+    try { sample = await window.claude.use("sample"); } catch (e) { sample = null; }
+    if (!sample) return;
+    const limits = await sample.limits().catch(() => null);
+    if (!limits || !limits.images) return;
+    const fileInput = $("#photo-file");
+    fileInput.accept = limits.images.mediaTypes.join(",");
+    $("#photo-btn").hidden = false;
+    let ctl = null;
+
+    $("#photo-btn").addEventListener("click", () => {
+      $("#photo-panel").hidden = false;
+      $("#photo-meal").innerHTML = mealOptions(defaultMeal());
+      $("#photo-panel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+    $("#photo-close").addEventListener("click", () => { if (ctl) ctl.abort(); $("#photo-panel").hidden = true; });
+    fileInput.addEventListener("change", () => {
+      const files = Array.from(fileInput.files || []).slice(0, limits.images.maxCount);
+      $("#photo-thumbs").innerHTML = "";
+      for (const f of files) {
+        const img = document.createElement("img");
+        img.alt = "Selected meal photo";
+        img.src = URL.createObjectURL(f);
+        $("#photo-thumbs").append(img);
+      }
+      $("#photo-go").disabled = !files.length;
+      $("#photo-results").innerHTML = "";
+      $("#photo-msg").textContent = files.length > 0 && (fileInput.files.length > files.length) ? `Using the first ${files.length} photos.` : "";
+    });
+    $("#photo-stop").addEventListener("click", () => ctl && ctl.abort());
+
+    $("#photo-go").addEventListener("click", async () => {
+      const files = Array.from(fileInput.files || []).slice(0, limits.images.maxCount);
+      if (!files.length) return;
+      ctl = new AbortController();
+      $("#photo-go").disabled = true;
+      $("#photo-stop").hidden = false;
+      $("#photo-results").innerHTML = "";
+      $("#photo-msg").textContent = "Looking at your photo… this usually takes 10 to 40 seconds.";
+      try {
+        const out = await sample.json(PHOTO_PROMPT($("#photo-note").value.trim()), { images: files, signal: ctl.signal });
+        const items = (out && Array.isArray(out.items) ? out.items : []).filter((x) => x && x.name);
+        photoItems = items.map((x) => {
+          const n = zero();
+          for (const k of NK) n[k] = Math.max(0, Number(x[k]) || 0);
+          return { name: String(x.name).slice(0, 120), portion: String(x.portion || "1 portion").slice(0, 80), grams: Number(x.grams) > 0 ? Number(x.grams) : 0, n, on: true, mult: 1 };
+        });
+        $("#photo-msg").textContent = photoItems.length ? (out.note ? String(out.note) : "") : (out && out.note ? String(out.note) : "No food found in that photo. Try a clearer or closer shot.");
+        renderPhotoResults();
+      } catch (e) {
+        const code = e && e.code;
+        $("#photo-msg").textContent =
+          code === "cancelled" ? "Stopped." :
+          code === "not_granted" || code === "sampling_disabled" ? "Photo estimates need permission to use Claude. You can allow it from this page's permissions." :
+          code === "rate_limited" ? "Too many requests right now. Try again in a minute." :
+          code === "image_rejected" ? "That image couldn't be read. Try a JPEG or PNG under 20 MB." :
+          code === "invalid_json" ? "The estimate came back in an unexpected format. Press Estimate again." :
+          "The estimate didn't finish. Press Estimate again.";
+        if (code === "not_granted" || code === "sampling_disabled") $("#photo-btn").hidden = true;
+      } finally {
+        $("#photo-go").disabled = false;
+        $("#photo-stop").hidden = true;
+        ctl = null;
+      }
+    });
+
+    $("#photo-results").addEventListener("input", (e) => {
+      const i = Number(e.target.dataset.i);
+      if (!photoItems[i]) return;
+      if (e.target.type === "checkbox") photoItems[i].on = e.target.checked;
+      else photoItems[i].mult = Math.max(0, Number(e.target.value) || 0);
+      updatePhotoTotals();
+    });
+    $("#photo-results").addEventListener("click", (e) => {
+      if (!e.target.closest("#photo-add")) return;
+      const meal = $("#photo-meal").value;
+      let count = 0;
+      for (const it of photoItems) {
+        if (!it.on || !(it.mult > 0)) continue;
+        const g = it.grams || 100;
+        const per100 = {};
+        for (const k of NK) per100[k] = (it.n[k] / g) * 100;
+        const food = { id: "p:" + uid(), name: it.name, cat: "Photo", source: "photo", per100, serving: { label: it.portion, g } };
+        logFood(food, it.mult, "serving", meal);
+        count++;
+      }
+      if (!count) return;
+      photoItems = [];
+      $("#photo-results").innerHTML = "";
+      $("#photo-file").value = "";
+      $("#photo-thumbs").innerHTML = "";
+      $("#photo-note").value = "";
+      $("#photo-go").disabled = true;
+      $("#photo-msg").textContent = "";
+      $("#photo-panel").hidden = true;
+      renderToday();
+      toast(`Added ${count} item${count === 1 ? "" : "s"} to ${MEALS.find((m) => m.id === meal).label}`);
+    });
+  }
+  function renderPhotoResults() {
+    if (!photoItems.length) { $("#photo-results").innerHTML = ""; return; }
+    $("#photo-results").innerHTML = `<div class="est-list">${photoItems.map((it, i) => `
+      <div class="est">
+        <input type="checkbox" data-i="${i}" ${it.on ? "checked" : ""} aria-label="Include ${esc(it.name)}">
+        <div class="est-name"><b>${esc(it.name)}</b><small>${esc(it.portion)} · P ${fmt(it.n.pro)} · C ${fmt(it.n.carb)} · F ${fmt(it.n.fat)}</small></div>
+        <input type="number" min="0" step="0.25" value="${it.mult}" data-i="${i}" aria-label="Portions of ${esc(it.name)}" title="Portions eaten">
+        <span class="est-kcal" data-k="${i}"></span>
+      </div>`).join("")}</div>
+      <div class="est-foot"><span class="est-total" id="photo-total"></span><button class="btn primary" id="photo-add">Add to log</button></div>
+      <p class="hint">These are estimates from a photo. Portion sizes are the biggest source of error, so adjust the amount if you know it.</p>`;
+    updatePhotoTotals();
+  }
+  function updatePhotoTotals() {
+    let kcal = 0;
+    photoItems.forEach((it, i) => {
+      const k = it.n.kcal * it.mult;
+      const el = $(`[data-k="${i}"]`);
+      if (el) el.textContent = `${Math.round(k)} kcal`;
+      if (it.on) kcal += k;
+    });
+    const t = $("#photo-total");
+    if (t) t.textContent = `Total: ${Math.round(kcal).toLocaleString()} kcal`;
+  }
+
   // ---------- Sample day on first run ----------
   function seedExample() {
     const t = todayKey();
@@ -1069,10 +1242,68 @@
     if (!$("#view-history").hidden) renderHistory();
   }
 
+  function applyRemote(render) {
+    renderToday();
+    if (render === "config") {
+      if (!$("#goals-form").contains(document.activeElement)) fillGoals();
+      renderCustomList();
+      if (!$("#view-calc").contains(document.activeElement)) renderCalc();
+    }
+    if (!$("#view-history").hidden) renderHistory();
+  }
+
+  async function connectDb() {
+    let db = null;
+    try { db = await window.claude.use("db"); } catch (e) { db = null; }
+    if (!db) {
+      // Not available here (e.g. signed out): fall back to this browser's storage.
+      store.mode = "local";
+      const saved = load();
+      if (saved) state = saved;
+      renderAll();
+      return;
+    }
+    store.db = db;
+    store.mode = "db";
+    db.collection("days").onSnapshot((snap) => {
+      let changed = false;
+      for (const ch of snap.docChanges()) {
+        const k = ch.doc.id;
+        const path = "days/" + k;
+        if (ch.type === "removed") {
+          if (store.written.has(path)) { store.written.delete(path); delete state.log[k]; delete state.water[k]; changed = true; }
+          continue;
+        }
+        const body = ch.doc.data() || {};
+        const c = canon({ entries: body.entries || [], water: body.water || 0 });
+        if (c === store.written.get(path)) continue; // our own write echoing back
+        store.written.set(path, c);
+        const entries = Array.isArray(body.entries) ? body.entries.filter((e) => e && e.n) : [];
+        if (entries.length) state.log[k] = entries; else delete state.log[k];
+        if (body.water) state.water[k] = Number(body.water) || 0; else delete state.water[k];
+        changed = true;
+      }
+      if (changed) applyRemote("days");
+    }, () => toast("Lost the live connection. Reload the page to reconnect."));
+    db.doc("config/main").onSnapshot((snap) => {
+      if (!snap.exists) return;
+      const body = snap.data() || {};
+      const c = canon(body);
+      if (c === store.written.get("config/main")) return;
+      store.written.set("config/main", c);
+      const merged = normalize({ ...state, ...body });
+      state.goals = merged.goals; state.waterGoal = merged.waterGoal; state.custom = merged.custom;
+      state.recent = merged.recent; state.draft = merged.draft;
+      applyRemote("config");
+    }, () => {});
+  }
+
   if (firstRun) seedExample();
   renderAll();
   let startView = "today";
   try { startView = (location.hash || "").slice(1) || localStorage.getItem("nutrilog:view") || "today"; } catch (e) { /* ignore */ }
   showView(startView);
   if (firstRun) toast("Loaded a sample day so you can see how it works. Remove entries any time.");
+  if (store.mode === "pending") connectDb();
+  setupPhoto();
 })();

@@ -233,6 +233,24 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
 .nf .nf-foot { font-size: .66rem; padding-top: 4px; line-height: 1.3; }
 .nf b { font-weight: 900; }
 
+/* Photo estimate */
+.photo-btn { margin-left: auto; }
+.photo-panel { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.photo-head { display: flex; justify-content: space-between; align-items: center; }
+.photo-thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
+.photo-thumbs img { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+input[type="file"] { font-size: .85rem; max-width: 100%; }
+.est-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--r); }
+.est { display: grid; grid-template-columns: auto minmax(0, 1fr) 72px auto; gap: 10px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.est:last-child { border-bottom: 0; }
+.est input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
+.est-name b { display: block; font-weight: 600; overflow-wrap: anywhere; }
+.est-name small { color: var(--muted); font-size: .78rem; }
+.est input[type="number"] { min-height: 32px; padding: 4px 8px; }
+.est-kcal { font-family: var(--f-mono); font-size: .85rem; white-space: nowrap; text-align: right; }
+.est-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 4px; }
+.est-total { font-family: var(--f-mono); font-size: .9rem; }
+
 /* My foods */
 .foods-grid, .goals-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; align-items: start; }
 .nutrient-inputs { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
@@ -333,6 +351,8 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
   .ing { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) 32px; }
   .ing .ing-name { grid-column: 1 / -1; }
   .pd-preview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .est { grid-template-columns: auto minmax(0, 1fr) 64px; }
+  .est-kcal { grid-column: 2 / -1; text-align: left; }
   .topbar-inner { gap: 6px; padding-block: 8px 4px; }
   .tabs { flex-basis: 100%; }
   .tab { padding: 7px 10px; }
