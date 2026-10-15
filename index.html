@@ -40,6 +40,15 @@
       </div>
       <button class="btn icon" id="day-next" aria-label="Next day">&#8250;</button>
       <button class="btn ghost small" id="day-today">Jump to today</button>
+      <span class="streak" id="streak" hidden></span>
+    </div>
+
+    <div class="budget card" id="budget">
+      <div class="budget-main">
+        <div class="cal-ring" id="cal-ring"></div>
+        <div class="budget-eq" id="budget-eq"></div>
+      </div>
+      <div class="macro-rings" id="macro-rings"></div>
     </div>
 
     <div class="card photo-panel" id="photo-panel">
@@ -70,26 +79,37 @@
       <div id="photo-results"></div>
     </div>
 
-    <div class="summary">
-      <div class="cal-card">
-        <div class="cal-ring" id="cal-ring"></div>
-        <div class="cal-text">
-          <div class="eyebrow">Calories</div>
-          <div class="cal-big"><span id="cal-eaten">0</span><span class="unit"> / <span id="cal-goal">2000</span> kcal</span></div>
-          <div class="cal-left" id="cal-left"></div>
-          <div class="macro-split" id="macro-split" aria-label="Calories by macronutrient"></div>
-        </div>
-      </div>
-      <div class="bars" id="nutrient-bars"></div>
-    </div>
-
-    <div class="water">
-      <div class="eyebrow">Water</div>
-      <div class="glasses" id="glasses" aria-label="Glasses of water"></div>
-      <span class="water-count" id="water-count"></span>
-    </div>
-
     <div class="meals" id="meals"></div>
+
+    <div class="side-grid">
+      <div class="card exercise-card">
+        <div class="card-head"><h2>Exercise</h2><span class="meal-kcal" id="ex-total">0 kcal</span></div>
+        <ul class="entry-list" id="ex-list"></ul>
+        <form class="ex-form" id="ex-form" autocomplete="off">
+          <label class="field"><span>Activity</span><select id="ex-type"></select></label>
+          <label class="field" id="ex-name-l" hidden><span>Name</span><input type="text" id="ex-name" placeholder="e.g. Tennis"></label>
+          <label class="field narrow"><span>Minutes</span><input type="number" id="ex-min" min="1" step="1" value="30"></label>
+          <label class="field narrow"><span>kcal burned</span><input type="number" id="ex-kcal" min="0" step="1"></label>
+          <button class="btn" type="submit">Add</button>
+        </form>
+        <p class="hint" id="ex-hint"></p>
+      </div>
+      <div class="card body-card">
+        <div class="card-head"><h2>Water</h2><span class="water-count" id="water-count"></span></div>
+        <div class="glasses" id="glasses" aria-label="Glasses of water"></div>
+        <div class="card-head mt"><h2>Weigh-in</h2><span class="hint" id="weight-summary"></span></div>
+        <form class="weigh-form" id="weigh-form" autocomplete="off">
+          <label class="field"><span id="weigh-label">Weight (lb)</span><input type="number" id="weigh-input" min="20" max="1500" step="0.1"></label>
+          <button class="btn" type="submit" id="weigh-save">Save</button>
+          <button class="btn ghost small" type="button" id="weigh-del" hidden>Remove</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card nutrients-card">
+      <div class="card-head"><h2>Nutrient targets</h2><span class="hint">Today's totals against your goals</span></div>
+      <div class="targets" id="nutrient-bars"></div>
+    </div>
   </section>
 
   <!-- CALCULATOR -->
@@ -173,6 +193,10 @@
       <div class="chart-title">Calories per day <span class="legend-goal">- - goal</span></div>
       <div class="chart" id="chart"></div>
     </div>
+    <div class="card mt">
+      <div class="chart-title">Weight <span class="legend-goal" id="weight-legend"></span></div>
+      <div class="chart" id="weight-chart"></div>
+    </div>
     <div class="stat-row" id="history-stats"></div>
     <div class="card table-wrap">
       <table class="table" id="history-table"></table>
@@ -190,6 +214,8 @@
           <label class="field"><span>Water goal (glasses)</span><input type="number" id="goal-water" min="1" max="40" step="0.5"></label>
         </div>
         <p class="hint">1 glass = 8 fl oz (about 240 ml). Change either box and the other follows.</p>
+        <label class="field narrow"><span>Weight units</span>
+          <select id="goal-units"><option value="imperial">Pounds (lb)</option><option value="metric">Kilograms (kg)</option></select></label>
         <div class="row gap"><button class="btn primary" type="submit">Save targets</button></div>
         <p class="hint" id="goals-msg" role="status"></p>
       </form>

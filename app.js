@@ -72,7 +72,7 @@
 
   // ---------- Storage ----------
   function defaultState() {
-    return { log: {}, water: {}, custom: [], goals: { ...DEFAULT_GOALS }, waterGoal: 8, recent: [], draft: { name: "", servings: 1, items: [] } };
+    return { log: {}, water: {}, exercise: {}, weights: {}, units: "imperial", custom: [], goals: { ...DEFAULT_GOALS }, waterGoal: 8, recent: [], draft: { name: "", servings: 1, items: [] } };
   }
   function load() {
     try {
@@ -91,6 +91,9 @@
     if (!Array.isArray(out.recent)) out.recent = [];
     if (typeof out.log !== "object" || !out.log) out.log = {};
     if (typeof out.water !== "object" || !out.water) out.water = {};
+    if (typeof out.exercise !== "object" || !out.exercise) out.exercise = {};
+    if (typeof out.weights !== "object" || !out.weights) out.weights = {};
+    if (out.units !== "metric") out.units = "imperial";
     return out;
   }
   // Two storage backends: localStorage when opened as plain files, and the artifact's
@@ -98,8 +101,8 @@
   // In db mode each day is one document `days/<YYYY-MM-DD>` and settings live in `config/main`.
   const store = { mode: window.claude && typeof window.claude.use === "function" ? "pending" : "local", db: null, written: new Map(), timer: null, chain: Promise.resolve() };
   const canon = (v) => JSON.stringify(v, (k, x) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map((kk) => [kk, x[kk]])) : x));
-  const dayBody = (k) => ({ entries: state.log[k] || [], water: state.water[k] || 0 });
-  const configBody = () => ({ goals: state.goals, waterGoal: state.waterGoal, custom: state.custom, recent: state.recent, draft: state.draft });
+  const dayBody = (k) => ({ entries: state.log[k] || [], water: state.water[k] || 0, exercise: state.exercise[k] || [] });
+  const configBody = () => ({ goals: state.goals, waterGoal: state.waterGoal, units: state.units, weights: state.weights, custom: state.custom, recent: state.recent, draft: state.draft });
 
   function save() {
     if (store.mode === "db") {
@@ -112,12 +115,12 @@
   }
   function flushDb() {
     const writes = [];
-    const days = new Set([...Object.keys(state.log), ...Object.keys(state.water)]);
+    const days = new Set([...Object.keys(state.log), ...Object.keys(state.water), ...Object.keys(state.exercise)]);
     for (const p of store.written.keys()) if (p.startsWith("days/")) days.add(p.slice(5));
     for (const k of days) {
       const path = "days/" + k;
       const body = dayBody(k);
-      const empty = !body.entries.length && !body.water;
+      const empty = !body.entries.length && !body.water && !body.exercise.length;
       const prev = store.written.get(path);
       if (empty) {
         if (prev !== undefined) { store.written.delete(path); writes.push(() => store.db.doc(path).delete()); }
@@ -207,17 +210,40 @@
     return parseKey(k).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
   }
 
-  function ringSVG(eaten, goal) {
-    const r = 52, c = 2 * Math.PI * r;
-    const p = goal > 0 ? Math.min(eaten / goal, 1) : 0;
-    const over = goal > 0 && eaten > goal;
-    const pct = goal > 0 ? Math.round((eaten / goal) * 100) : 0;
-    return `<svg viewBox="0 0 120 120" role="img" aria-label="${pct}% of calorie goal">
-      <circle cx="60" cy="60" r="${r}" fill="none" stroke="var(--sunk)" stroke-width="10"/>
-      <circle cx="60" cy="60" r="${r}" fill="none" stroke="${over ? "var(--bad)" : "var(--accent)"}" stroke-width="10"
-        stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - p)}" transform="rotate(-90 60 60)"/>
-      <text x="60" y="66" text-anchor="middle" fill="var(--ink)" style="font:800 20px var(--f-display)">${pct}%</text>
+  // Ring that fills toward a goal. `label` sits in the middle; `sub` underneath it.
+  function ringSVG(value, goal, { size = 120, stroke = 10, color = "var(--accent)", label = "", sub = "", aria = "" } = {}) {
+    const r = (size - stroke) / 2, c = 2 * Math.PI * r, m = size / 2;
+    const p = goal > 0 ? Math.min(value / goal, 1) : 0;
+    const over = goal > 0 && value > goal * 1.0001;
+    return `<svg viewBox="0 0 ${size} ${size}" role="img" aria-label="${esc(aria)}">
+      <circle cx="${m}" cy="${m}" r="${r}" fill="none" stroke="var(--sunk)" stroke-width="${stroke}"/>
+      <circle cx="${m}" cy="${m}" r="${r}" fill="none" stroke="${over ? "var(--bad)" : color}" stroke-width="${stroke}"
+        stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - p)}" transform="rotate(-90 ${m} ${m})"/>
+      <text x="${m}" y="${sub ? m + size * 0.02 : m + size * 0.07}" text-anchor="middle" fill="var(--ink)" style="font:800 ${size * 0.2}px var(--f-display)">${label}</text>
+      ${sub ? `<text x="${m}" y="${m + size * 0.17}" text-anchor="middle" fill="var(--muted)" style="font:500 ${size * 0.095}px var(--f-body)">${sub}</text>` : ""}
     </svg>`;
+  }
+
+  const exerciseKcal = (k = currentDay) => (state.exercise[k] || []).reduce((a, x) => a + (Number(x.kcal) || 0), 0);
+  function streakDays() {
+    let k = todayKey();
+    if (!dayEntries(k).length) k = addDays(k, -1);
+    let n = 0;
+    while (dayEntries(k).length) { n++; k = addDays(k, -1); }
+    return n;
+  }
+  // Cronometer-style status for a nutrient: targets to reach vs limits to stay under.
+  function nutrientStatus(key, v, goal) {
+    if (!(goal > 0)) return { cls: "", text: "" };
+    const r = v / goal;
+    if (key === "pro" || key === "fib") {
+      if (r >= 0.9) return { cls: "good", text: "Met" };
+      if (r >= 0.5) return { cls: "", text: `${fmt(goal - v, key)} ${NBY[key].unit} to go` };
+      return { cls: "low", text: "Low" };
+    }
+    if (r > 1) return { cls: "bad", text: "Over" };
+    if (r > 0.85) return { cls: "warn", text: "Near limit" };
+    return { cls: "good", text: "Under limit" };
   }
 
   function renderToday() {
@@ -228,40 +254,48 @@
     $("#day-label").textContent = dayLabel(currentDay);
     $("#day-picker").value = currentDay;
     $("#day-today").hidden = currentDay === todayKey();
+    const streak = streakDays();
+    $("#streak").hidden = streak < 2;
+    $("#streak").textContent = `${streak}-day streak`;
 
-    $("#cal-ring").innerHTML = ringSVG(totals.kcal, g.kcal);
-    $("#cal-eaten").textContent = Math.round(totals.kcal).toLocaleString();
-    $("#cal-goal").textContent = Math.round(g.kcal).toLocaleString();
-    const left = g.kcal - totals.kcal;
-    const leftEl = $("#cal-left");
-    leftEl.textContent = left >= 0 ? `${Math.round(left).toLocaleString()} kcal left` : `${Math.round(-left).toLocaleString()} kcal over goal`;
-    leftEl.classList.toggle("over", left < 0);
+    // Calorie budget: goal - food + exercise = remaining (the MyFitnessPal equation)
+    const ex = exerciseKcal();
+    const budget = g.kcal + ex;
+    const remaining = budget - totals.kcal;
+    const over = remaining < 0;
+    $("#cal-ring").innerHTML = ringSVG(totals.kcal, budget, {
+      size: 148, stroke: 12, label: Math.abs(Math.round(remaining)).toLocaleString(), sub: over ? "kcal over" : "kcal left",
+      aria: `${Math.round(totals.kcal)} of ${Math.round(budget)} calories eaten`,
+    });
+    const term = (v, l, cls = "") => `<div class="eq-term ${cls}"><b>${Math.round(v).toLocaleString()}</b><span>${l}</span></div>`;
+    $("#budget-eq").innerHTML = `
+      <div class="eyebrow">Calories</div>
+      <div class="eq">${term(g.kcal, "Goal")}<i>−</i>${term(totals.kcal, "Food")}<i>+</i>${term(ex, "Exercise")}<i>=</i>${term(Math.abs(remaining), over ? "Over" : "Remaining", over ? "bad" : "ok")}</div>`;
 
-    // Calories from each macro (4/4/9 kcal per gram)
-    const mk = { pro: totals.pro * 4, carb: totals.carb * 4, fat: totals.fat * 9 };
-    const mt = mk.pro + mk.carb + mk.fat;
-    const split = $("#macro-split");
-    split.innerHTML = mt > 0
-      ? ["pro", "carb", "fat"].map((k) => `<span style="width:${(mk[k] / mt) * 100}%;background:var(--${k})" title="${NBY[k].label} ${Math.round((mk[k] / mt) * 100)}%"></span>`).join("")
-      : "";
-    let key = split.nextElementSibling;
-    if (!key || !key.classList.contains("macro-key")) {
-      key = document.createElement("div");
-      key.className = "macro-key";
-      split.after(key);
-    }
-    key.innerHTML = ["pro", "carb", "fat"].map((k) => `<span><i style="background:var(--${k})"></i>${NBY[k].label === "Carbohydrates" ? "Carbs" : NBY[k].label} ${mt > 0 ? Math.round((mk[k] / mt) * 100) : 0}%</span>`).join("");
-
-    $("#nutrient-bars").innerHTML = NUTRIENTS.filter((n) => n.key !== "kcal").map((n) => {
-      const v = totals[n.key], goal = g[n.key] || 0;
-      const p = goal > 0 ? Math.min((v / goal) * 100, 100) : 0;
-      const over = LIMITS.has(n.key) && goal > 0 && v > goal;
-      return `<div class="bar-item">
-        <div class="bar-top"><b>${n.label === "Carbohydrates" ? "Carbs" : n.label}</b><span class="num">${fmt(v, n.key)} / ${fmt(goal, n.key)} ${n.unit}</span></div>
-        <div class="bar-track"><div class="bar-fill${over ? " over" : ""}" style="width:${p}%"></div></div>
+    $("#macro-rings").innerHTML = ["pro", "carb", "fat"].map((k) => {
+      const v = totals[k], goal = g[k] || 0;
+      const left = goal - v;
+      const name = k === "carb" ? "Carbs" : NBY[k].label;
+      return `<div class="macro-ring">
+        ${ringSVG(v, goal, { size: 76, stroke: 8, color: `var(--${k})`, label: fmt(v), aria: `${name} ${fmt(v)} of ${fmt(goal)} grams` })}
+        <div><b>${name}</b><span class="num">${fmt(v)} / ${fmt(goal)} g</span><small class="${left < 0 ? "over" : ""}">${left >= 0 ? `${fmt(left)} g left` : `${fmt(-left)} g over`}</small></div>
       </div>`;
     }).join("");
 
+    $("#nutrient-bars").innerHTML = ["fib", "sug", "sat", "chol", "na"].map((key) => {
+      const n = NBY[key];
+      const v = totals[key], goal = g[key] || 0;
+      const p = goal > 0 ? Math.min((v / goal) * 100, 100) : 0;
+      const st = nutrientStatus(key, v, goal);
+      return `<div class="target ${st.cls}">
+        <div class="bar-top"><b>${n.label}</b><span class="num">${fmt(v, key)} / ${fmt(goal, key)} ${n.unit}</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${p}%"></div></div>
+        <span class="pill">${st.text}</span>
+      </div>`;
+    }).join("");
+
+    renderExercise();
+    renderWeight();
     renderWater();
 
     $("#meals").innerHTML = MEALS.map((m) => {
@@ -281,7 +315,7 @@
       return `<div class="meal">
         <div class="meal-head"><h2>${m.label}</h2><span class="meal-kcal">${Math.round(kcal)} kcal</span></div>
         ${items}
-        <div class="meal-foot"><button class="btn ghost small" data-addmeal="${m.id}">+ Add food</button></div>
+        <div class="meal-foot"><button class="btn ghost small" data-addmeal="${m.id}">+ Add food</button>${!list.length && dayEntries(addDays(currentDay, -1)).some((e) => e.meal === m.id) ? `<button class="btn ghost small" data-copymeal="${m.id}">Copy yesterday's ${m.label.toLowerCase()}</button>` : ""}</div>
       </div>`;
     }).join("");
   }
@@ -295,6 +329,110 @@
       `<button class="glass${i < n ? " full" : ""}" data-glass="${i}" aria-label="${i < n ? "Remove" : "Add"} glass ${i + 1}"></button>`).join("");
     $("#water-count").textContent = `${n} of ${round(goal, 1)} glasses · ${n * GLASS_OZ} of ${Math.round(goal * GLASS_OZ)} fl oz`;
   }
+  // ---------- Exercise ----------
+  // MET values from the Compendium of Physical Activities; kcal = MET x kg x hours.
+  const ACTIVITIES = [
+    ["Walking, brisk", 4.3], ["Running, 6 mph", 9.8], ["Cycling, moderate", 7.5], ["Strength training", 5.0],
+    ["Swimming laps", 6.0], ["Hiking", 6.0], ["HIIT / circuit", 8.0], ["Yoga", 2.5], ["Dancing", 5.0], ["Other", 0],
+  ];
+  const KG_PER_LB = 0.453592;
+  function latestWeightKg(onOrBefore = currentDay) {
+    const keys = Object.keys(state.weights).filter((k) => k <= onOrBefore).sort();
+    return keys.length ? state.weights[keys[keys.length - 1]] : null;
+  }
+  function estimateExercise() {
+    const met = Number($("#ex-type").value) || 0;
+    const min = Number($("#ex-min").value) || 0;
+    const kg = latestWeightKg() || 70;
+    if (met > 0) $("#ex-kcal").value = Math.round(met * kg * (min / 60));
+    $("#ex-name-l").hidden = met > 0;
+    $("#ex-hint").textContent = met > 0
+      ? `Estimated for ${state.units === "metric" ? `${round(kg, 1)} kg` : `${round(kg / KG_PER_LB, 1)} lb`}${latestWeightKg() ? "" : " (log a weigh-in for a closer estimate)"}. Edit the number if your watch says otherwise.`
+      : "Enter the calories your watch or machine reports.";
+  }
+  $("#ex-type").innerHTML = ACTIVITIES.map(([n, met]) => `<option value="${met}">${n}</option>`).join("");
+  $("#ex-type").addEventListener("change", estimateExercise);
+  $("#ex-min").addEventListener("input", estimateExercise);
+  $("#ex-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const sel = $("#ex-type");
+    const met = Number(sel.value) || 0;
+    const name = met > 0 ? sel.options[sel.selectedIndex].text : ($("#ex-name").value.trim() || "Exercise");
+    const kcal = Math.max(0, Math.round(Number($("#ex-kcal").value) || 0));
+    const min = Math.max(0, Math.round(Number($("#ex-min").value) || 0));
+    if (!kcal) { $("#ex-kcal").focus(); return; }
+    (state.exercise[currentDay] || (state.exercise[currentDay] = [])).push({ id: uid(), name, min, kcal });
+    save();
+    renderToday();
+    toast(`Added ${name}: ${kcal} kcal`);
+  });
+  $("#ex-list").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-exdel]");
+    if (!b) return;
+    const list = state.exercise[currentDay] || [];
+    const i = list.findIndex((x) => x.id === b.dataset.exdel);
+    if (i < 0) return;
+    list.splice(i, 1);
+    if (!list.length) delete state.exercise[currentDay];
+    save();
+    renderToday();
+  });
+  function renderExercise() {
+    const list = state.exercise[currentDay] || [];
+    $("#ex-total").textContent = `${Math.round(exerciseKcal()).toLocaleString()} kcal`;
+    $("#ex-list").innerHTML = list.length
+      ? list.map((x) => `<li class="entry"><div class="entry-name"><b>${esc(x.name)}</b><small>${x.min ? `${x.min} min` : ""}</small></div>
+          <span class="entry-kcal">${Math.round(x.kcal)} kcal</span>
+          <button class="entry-del" data-exdel="${x.id}" aria-label="Remove ${esc(x.name)}">&times;</button></li>`).join("")
+      : `<li class="meal-empty">No exercise logged. Calories you burn are added to today's budget.</li>`;
+    estimateExercise();
+  }
+
+  // ---------- Weight ----------
+  const toDisplay = (kg) => (state.units === "metric" ? kg : kg / KG_PER_LB);
+  const unitLabel = () => (state.units === "metric" ? "kg" : "lb");
+  // Exponentially smoothed trend (alpha 0.1), the approach MacroFactor and Libra use to filter daily water swings.
+  function weightTrend() {
+    const keys = Object.keys(state.weights).sort();
+    let t = null;
+    return keys.map((k) => {
+      const w = state.weights[k];
+      t = t == null ? w : t + 0.1 * (w - t);
+      return { k, w, t };
+    });
+  }
+  function renderWeight() {
+    $("#weigh-label").textContent = `Weight (${unitLabel()})`;
+    const w = state.weights[currentDay];
+    const input = $("#weigh-input");
+    if (document.activeElement !== input) input.value = w ? round(toDisplay(w), 1) : "";
+    $("#weigh-save").textContent = w ? "Update" : "Save";
+    $("#weigh-del").hidden = !w;
+    const tr = weightTrend().filter((x) => x.k <= currentDay);
+    if (!tr.length) { $("#weight-summary").textContent = "No weigh-ins yet"; return; }
+    const last = tr[tr.length - 1];
+    const ref = tr.filter((x) => x.k <= addDays(last.k, -7)).pop() || tr[0];
+    const delta = toDisplay(last.t) - toDisplay(ref.t);
+    const days = Math.round((parseKey(last.k) - parseKey(ref.k)) / 864e5);
+    $("#weight-summary").textContent = `Trend ${round(toDisplay(last.t), 1)} ${unitLabel()}` +
+      (days > 0 ? ` · ${delta > 0 ? "+" : delta < 0 ? "−" : "±"}${Math.abs(round(delta, 1))} in ${days} days` : "");
+  }
+  $("#weigh-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const v = Number($("#weigh-input").value);
+    if (!(v > 0)) { $("#weigh-input").focus(); return; }
+    state.weights[currentDay] = round(state.units === "metric" ? v : v * KG_PER_LB, 3);
+    save();
+    $("#weigh-input").blur();
+    renderToday();
+    toast("Weigh-in saved");
+  });
+  $("#weigh-del").addEventListener("click", () => {
+    delete state.weights[currentDay];
+    save();
+    renderToday();
+  });
+
   $("#glasses").addEventListener("click", (e) => {
     const b = e.target.closest("[data-glass]");
     if (!b) return;
@@ -309,6 +447,17 @@
   $("#meals").addEventListener("click", (e) => {
     const add = e.target.closest("[data-addmeal]");
     if (add) return openPicker({ mode: "log", meal: add.dataset.addmeal });
+    const copy = e.target.closest("[data-copymeal]");
+    if (copy) {
+      const meal = copy.dataset.copymeal;
+      const src = dayEntries(addDays(currentDay, -1)).filter((x) => x.meal === meal);
+      const list = state.log[currentDay] || (state.log[currentDay] = []);
+      for (const x of src) list.push({ ...JSON.parse(JSON.stringify(x)), id: uid() });
+      save();
+      renderToday();
+      toast(`Copied ${src.length} item${src.length === 1 ? "" : "s"} from yesterday`);
+      return;
+    }
     const del = e.target.closest("[data-del]");
     if (del) {
       const list = dayEntries();
@@ -911,6 +1060,8 @@
     };
     chart.onmouseleave = () => { tip.hidden = true; $$(".bar.hover", chart).forEach((b) => b.classList.remove("hover")); };
 
+    renderWeightChart(days.map((d) => d.k));
+
     const logged = days.filter((d) => d.count > 0);
     const avg = logged.length ? sum(logged.map((d) => d.n)) : zero();
     if (logged.length) for (const k of NK) avg[k] /= logged.length;
@@ -930,6 +1081,59 @@
     $("#history-table").innerHTML = `<thead>${head}</thead><tbody>${rows}</tbody>`;
   }
 
+  function renderWeightChart(dayKeys) {
+    const box = $("#weight-chart");
+    const all = weightTrend();
+    const pts = all.filter((x) => x.k >= dayKeys[0] && x.k <= dayKeys[dayKeys.length - 1]);
+    const u = unitLabel();
+    if (!pts.length) {
+      $("#weight-legend").textContent = "";
+      box.innerHTML = `<p class="hint chart-empty">No weigh-ins in this range. Log your weight on the Today page to see your trend here.</p>`;
+      return;
+    }
+    $("#weight-legend").innerHTML = `<span class="lg-dot"></span>scale <span class="lg-line"></span>trend`;
+    const W = Math.max(300, Math.round(box.clientWidth || 640)), H = W < 500 ? 180 : 210, L = 44, R = 12, T = 12, B = 26;
+    const vals = pts.flatMap((x) => [toDisplay(x.w), toDisplay(x.t)]);
+    let lo = Math.min(...vals), hi = Math.max(...vals);
+    const span = Math.max(hi - lo, u === "kg" ? 1 : 2);
+    const step = [0.5, 1, 2, 5, 10, 20].find((st) => span / st <= 5) || 50;
+    lo = Math.floor((lo - span * 0.1) / step) * step;
+    hi = Math.ceil((hi + span * 0.1) / step) * step;
+    const n = dayKeys.length;
+    const idx = Object.fromEntries(dayKeys.map((k, i) => [k, i]));
+    const x = (k) => L + ((W - L - R) * (idx[k] + 0.5)) / n;
+    const y = (v) => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Weight and trend for the last ${n} days">`;
+    for (let v = lo; v <= hi + 1e-9; v += step) {
+      svg += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="axis-t" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${round(v, 1)}</text>`;
+    }
+    const labelEvery = Math.max(1, Math.ceil(n / Math.floor((W - L - R) / 44)));
+    dayKeys.forEach((k, i) => {
+      if ((n - 1 - i) % labelEvery) return;
+      const dt = parseKey(k);
+      svg += `<text class="axis-t" x="${x(k)}" y="${H - 8}" text-anchor="middle">${dt.getMonth() + 1}/${dt.getDate()}</text>`;
+    });
+    svg += `<path class="trend" d="${pts.map((p, i) => `${i ? "L" : "M"}${x(p.k)},${y(toDisplay(p.t))}`).join(" ")}"/>`;
+    for (const p of pts) svg += `<circle class="scale-dot" cx="${x(p.k)}" cy="${y(toDisplay(p.w))}" r="4"/>`;
+    const last = pts[pts.length - 1];
+    svg += `<circle class="trend-end" cx="${x(last.k)}" cy="${y(toDisplay(last.t))}" r="4.5"/>`;
+    svg += `</svg><div class="tip" hidden></div>`;
+    box.innerHTML = svg;
+    const tip = $(".tip", box);
+    box.onmousemove = (e) => {
+      const rect = box.getBoundingClientRect();
+      const px = ((e.clientX - rect.left) / rect.width) * W;
+      let best = null;
+      for (const p of pts) if (!best || Math.abs(x(p.k) - px) < Math.abs(x(best.k) - px)) best = p;
+      if (!best || Math.abs(x(best.k) - px) > (W - L - R) / n) { tip.hidden = true; return; }
+      tip.innerHTML = `<b>${parseKey(best.k).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</b> · scale ${round(toDisplay(best.w), 1)} ${u} · trend ${round(toDisplay(best.t), 1)} ${u}`;
+      tip.hidden = false;
+      tip.style.left = Math.min(Math.max(e.clientX - rect.left, 110), rect.width - 110) + "px";
+      tip.style.top = (y(toDisplay(best.w)) / H) * rect.height + "px";
+    };
+    box.onmouseleave = () => (tip.hidden = true);
+  }
+
   let resizeTimer;
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
@@ -941,6 +1145,7 @@
     `<label class="field"><span>${n.label} (${n.unit})</span><input type="number" min="0" step="any" id="g-${n.key}"></label>`).join("");
   function fillGoals() {
     for (const k of NK) $("#g-" + k).value = round(state.goals[k], 0);
+    $("#goal-units").value = state.units;
     $("#goal-water").value = round(state.waterGoal, 1);
     $("#goal-water-oz").value = Math.round(state.waterGoal * GLASS_OZ);
   }
@@ -957,6 +1162,7 @@
     for (const k of NK) { const v = Number($("#g-" + k).value); if (v >= 0) state.goals[k] = v; }
     const oz = Number($("#goal-water-oz").value);
     state.waterGoal = oz > 0 ? Math.max(1, oz / GLASS_OZ) : 8;
+    state.units = $("#goal-units").value === "metric" ? "metric" : "imperial";
     save();
     renderToday();
     $("#goals-msg").textContent = "Targets saved.";
@@ -1275,6 +1481,14 @@ Include visible sauces, dressings, oils and drinks as their own items. Use typic
     ];
     plans.forEach((plan, i) => plan.forEach(([id, amt, meal]) => add(id, amt, "serving", meal, addDays(t, -(i + 1)))));
     state.water[t] = 3;
+    state.exercise[t] = [{ id: uid(), name: "Walking, brisk", min: 40, kcal: 210 }];
+    // Two weeks of example weigh-ins drifting down about half a pound a week
+    let lb = 162.4;
+    for (let i = 20; i >= 0; i--) {
+      if (i % 3 === 2) continue;
+      const noise = Math.sin(i * 1.7) * 0.9;
+      state.weights[addDays(t, -i)] = round((lb - (20 - i) * 0.07 + noise) * KG_PER_LB, 3);
+    }
     state.draft = {
       name: "Chicken burrito bowl (example)",
       servings: 2,
@@ -1326,16 +1540,18 @@ Include visible sauces, dressings, oils and drinks as their own items. Use typic
         const k = ch.doc.id;
         const path = "days/" + k;
         if (ch.type === "removed") {
-          if (store.written.has(path)) { store.written.delete(path); delete state.log[k]; delete state.water[k]; changed = true; }
+          if (store.written.has(path)) { store.written.delete(path); delete state.log[k]; delete state.water[k]; delete state.exercise[k]; changed = true; }
           continue;
         }
         const body = ch.doc.data() || {};
-        const c = canon({ entries: body.entries || [], water: body.water || 0 });
+        const c = canon({ entries: body.entries || [], water: body.water || 0, exercise: body.exercise || [] });
         if (c === store.written.get(path)) continue; // our own write echoing back
         store.written.set(path, c);
         const entries = Array.isArray(body.entries) ? body.entries.filter((e) => e && e.n) : [];
         if (entries.length) state.log[k] = entries; else delete state.log[k];
         if (body.water) state.water[k] = Number(body.water) || 0; else delete state.water[k];
+        const ex = Array.isArray(body.exercise) ? body.exercise.filter((x) => x && x.kcal >= 0) : [];
+        if (ex.length) state.exercise[k] = ex; else delete state.exercise[k];
         changed = true;
       }
       if (changed) applyRemote("days");
@@ -1349,6 +1565,7 @@ Include visible sauces, dressings, oils and drinks as their own items. Use typic
       const merged = normalize({ ...state, ...body });
       state.goals = merged.goals; state.waterGoal = merged.waterGoal; state.custom = merged.custom;
       state.recent = merged.recent; state.draft = merged.draft;
+      state.weights = merged.weights; state.units = merged.units;
       applyRemote("config");
     }, () => {});
   }
