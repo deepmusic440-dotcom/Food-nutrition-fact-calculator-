@@ -54,8 +54,8 @@
           <span>Add a photo</span>
           <div class="photo-sources">
             <label class="btn photo-src">Take photo<input type="file" id="photo-camera" class="visually-hidden" accept="image/*" capture="environment"></label>
-            <label class="btn photo-src">Choose photo<input type="file" id="photo-library" class="visually-hidden" accept="image/*" multiple></label>
-            <label class="btn photo-src">Choose file<input type="file" id="photo-file" class="visually-hidden" accept=".jpg,.jpeg,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif" multiple></label>
+            <label class="btn photo-src">Choose existing<input type="file" id="photo-library" class="visually-hidden" accept="image/*" multiple></label>
+            <label class="btn photo-src">Upload file<input type="file" id="photo-file" class="visually-hidden" accept=".jpg,.jpeg,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif" multiple></label>
           </div>
         </div>
         <label class="field"><span>Meal</span><select id="photo-meal"></select></label>
@@ -235,7 +235,7 @@
             <button class="btn" id="data-copy">Copy</button>
             <button class="btn" id="data-download">Download file</button>
             <button class="btn primary" id="data-apply" hidden>Restore from this text</button>
-            <label class="btn" id="data-file-l" hidden>Choose file<input type="file" id="data-file" accept=".json,application/json" hidden></label>
+            <label class="btn" id="data-file-l" hidden>Upload file<input type="file" id="data-file" accept=".json,application/json" hidden></label>
           </div>
         </div>
         <div id="reset-confirm" class="confirm mt" hidden>
