@@ -40,15 +40,13 @@
       </div>
       <button class="btn icon" id="day-next" aria-label="Next day">&#8250;</button>
       <button class="btn ghost small" id="day-today">Jump to today</button>
-      <button class="btn primary small photo-btn" id="photo-btn" hidden>Log from photo</button>
     </div>
 
-    <div class="card photo-panel" id="photo-panel" hidden>
+    <div class="card photo-panel" id="photo-panel">
       <div class="photo-head">
-        <h2>Estimate from a photo</h2>
-        <button class="btn icon ghost" id="photo-close" aria-label="Close">&times;</button>
+        <h2>Log a meal from a photo</h2>
       </div>
-      <p class="hint">Take or choose a photo of your meal. Claude estimates each item, and you can untick or resize anything before adding it.</p>
+      <p class="hint">Add a photo of your meal. Claude estimates each item, and you can untick or resize anything before adding it.</p>
       <div class="field-row">
         <div class="field grow">
           <span>Add a photo</span>
@@ -60,11 +58,13 @@
         </div>
         <label class="field"><span>Meal</span><select id="photo-meal"></select></label>
       </div>
-      <div class="photo-thumbs" id="photo-thumbs"></div>
-      <label class="field"><span>Details that help (optional)</span><input type="text" id="photo-note" placeholder="e.g. cooked in olive oil, I ate about half"></label>
-      <div class="row gap">
-        <button class="btn primary" id="photo-go" disabled>Estimate nutrition</button>
-        <button class="btn ghost" id="photo-stop" hidden>Stop</button>
+      <div class="photo-details" id="photo-details" hidden>
+        <div class="photo-thumbs" id="photo-thumbs"></div>
+        <label class="field"><span>Details that help (optional)</span><input type="text" id="photo-note" placeholder="e.g. cooked in olive oil, I ate about half"></label>
+        <div class="row gap">
+          <button class="btn primary" id="photo-go" disabled>Estimate nutrition</button>
+          <button class="btn ghost" id="photo-stop" hidden>Stop</button>
+        </div>
       </div>
       <p class="hint" id="photo-msg" role="status"></p>
       <div id="photo-results"></div>

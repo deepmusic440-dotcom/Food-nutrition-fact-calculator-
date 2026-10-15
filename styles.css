@@ -234,9 +234,10 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
 .nf b { font-weight: 900; }
 
 /* Photo estimate */
-.photo-btn { margin-left: auto; }
 .photo-panel { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
 .photo-head { display: flex; justify-content: space-between; align-items: center; }
+.photo-details { display: flex; flex-direction: column; gap: 12px; }
+#photo-msg:empty, #photo-results:empty { display: none; }
 .photo-thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
 .photo-sources { display: flex; gap: 8px; flex-wrap: wrap; }
 .photo-src { flex: 1 1 120px; }
@@ -360,6 +361,8 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
   .ing { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) 32px; }
   .ing .ing-name { grid-column: 1 / -1; }
   .pd-preview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .photo-panel .field-row > .field { flex-basis: 100%; }
+  .photo-src { flex: 1 1 0; padding-inline: 6px; min-width: 0; text-align: center; }
   .est { grid-template-columns: auto minmax(0, 1fr) 64px; }
   .est-kcal { grid-column: 2 / -1; text-align: left; }
   .topbar-inner { gap: 6px; padding-block: 8px 4px; }

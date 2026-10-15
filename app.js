@@ -1073,20 +1073,29 @@ Rules: values are totals for the portion shown, not per 100 g. kcal in kcal; pro
 Include visible sauces, dressings, oils and drinks as their own items. Use typical USDA values. If there is no food in the photo, return {"items":[],"note":"..."}.`;
 
   let photoItems = [];
-  async function setupPhoto() {
-    if (!window.claude || typeof window.claude.use !== "function") return;
+  function setupPhoto() {
+    // The card is always shown. Whether Claude can look at images is checked in the
+    // background and only matters when the person presses Estimate.
     let sample = null;
-    try { sample = await window.claude.use("sample"); } catch (e) { sample = null; }
-    if (!sample) return;
-    const limits = await sample.limits().catch(() => null);
-    if (!limits || !limits.images) return;
+    let limits = null;
+    const ready = (async () => {
+      if (!window.claude || typeof window.claude.use !== "function") return;
+      try { sample = await window.claude.use("sample"); } catch (e) { sample = null; }
+      if (sample) limits = await sample.limits().catch(() => null);
+    })();
     // Three ways in: camera, photo library, or any image file. Picks from all three collect into one set.
     const sources = ["#photo-camera", "#photo-library", "#photo-file"].map((id) => $(id));
-    const types = new Set(limits.images.mediaTypes);
-    const maxCount = limits.images.maxCount;
+    const types = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+    let maxCount = 5;
+    ready.then(() => {
+      if (limits && limits.images) {
+        limits.images.mediaTypes.forEach((t) => types.add(t));
+        maxCount = limits.images.maxCount;
+      }
+    });
     let photoFiles = [];
-    $("#photo-btn").hidden = false;
     let ctl = null;
+    $("#photo-meal").innerHTML = mealOptions(defaultMeal());
 
     function renderThumbs() {
       const box = $("#photo-thumbs");
@@ -1107,6 +1116,7 @@ Include visible sauces, dressings, oils and drinks as their own items. Use typic
         box.append(wrap);
       });
       $("#photo-go").disabled = !photoFiles.length;
+      $("#photo-details").hidden = !photoFiles.length;
     }
     function addFiles(list) {
       const picked = Array.from(list || []);
@@ -1131,17 +1141,19 @@ Include visible sauces, dressings, oils and drinks as their own items. Use typic
       renderThumbs();
     });
 
-    $("#photo-btn").addEventListener("click", () => {
-      $("#photo-panel").hidden = false;
-      $("#photo-meal").innerHTML = mealOptions(defaultMeal());
-      $("#photo-panel").scrollIntoView({ behavior: "smooth", block: "nearest" });
-    });
-    $("#photo-close").addEventListener("click", () => { if (ctl) ctl.abort(); $("#photo-panel").hidden = true; });
     $("#photo-stop").addEventListener("click", () => ctl && ctl.abort());
 
     $("#photo-go").addEventListener("click", async () => {
       const files = photoFiles.slice();
       if (!files.length) return;
+      $("#photo-msg").textContent = "Checking that photo estimates are available…";
+      await ready;
+      if (!sample || !limits || !limits.images) {
+        $("#photo-msg").textContent = window.claude
+          ? "Photo estimates aren't available in this view of the app. Send the photo to Claude in your chat instead, and it will be added to your log here."
+          : "Photo estimates only work in the version hosted on claude.ai. Here, search for the foods instead.";
+        return;
+      }
       ctl = new AbortController();
       $("#photo-go").disabled = true;
       $("#photo-stop").hidden = false;
@@ -1166,7 +1178,6 @@ Include visible sauces, dressings, oils and drinks as their own items. Use typic
           code === "image_rejected" ? "That image couldn't be read. Try a JPEG or PNG under 20 MB." :
           code === "invalid_json" ? "The estimate came back in an unexpected format. Press Estimate again." :
           "The estimate didn't finish. Press Estimate again.";
-        if (code === "not_granted" || code === "sampling_disabled") $("#photo-btn").hidden = true;
       } finally {
         $("#photo-go").disabled = false;
         $("#photo-stop").hidden = true;
@@ -1202,7 +1213,6 @@ Include visible sauces, dressings, oils and drinks as their own items. Use typic
       $("#photo-note").value = "";
       $("#photo-go").disabled = true;
       $("#photo-msg").textContent = "";
-      $("#photo-panel").hidden = true;
       renderToday();
       toast(`Added ${count} item${count === 1 ? "" : "s"} to ${MEALS.find((m) => m.id === meal).label}`);
     });
