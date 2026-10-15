@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NutriLog</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Calculate nutrition facts for foods and recipes, and track your daily intake.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Libre+Franklin:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">N</span>
+      <span class="brand-name">NutriLog</span>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button class="tab" role="tab" id="tab-today" data-view="today" aria-selected="true">Today</button>
+      <button class="tab" role="tab" id="tab-calc" data-view="calc" aria-selected="false">Calculator</button>
+      <button class="tab" role="tab" id="tab-foods" data-view="foods" aria-selected="false">My foods</button>
+      <button class="tab" role="tab" id="tab-history" data-view="history" aria-selected="false">History</button>
+      <button class="tab" role="tab" id="tab-goals" data-view="goals" aria-selected="false">Goals</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- TODAY -->
+  <section class="view" id="view-today" role="tabpanel" aria-labelledby="tab-today">
+    <div class="day-nav">
+      <button class="btn icon" id="day-prev" aria-label="Previous day">&#8249;</button>
+      <div class="day-title">
+        <h1 id="day-label">Today</h1>
+        <input type="date" id="day-picker" aria-label="Pick a date">
+      </div>
+      <button class="btn icon" id="day-next" aria-label="Next day">&#8250;</button>
+      <button class="btn ghost small" id="day-today">Jump to today</button>
+    </div>
+
+    <div class="summary">
+      <div class="cal-card">
+        <div class="cal-ring" id="cal-ring"></div>
+        <div class="cal-text">
+          <div class="eyebrow">Calories</div>
+          <div class="cal-big"><span id="cal-eaten">0</span><span class="unit"> / <span id="cal-goal">2000</span> kcal</span></div>
+          <div class="cal-left" id="cal-left"></div>
+          <div class="macro-split" id="macro-split" aria-label="Calories by macronutrient"></div>
+        </div>
+      </div>
+      <div class="bars" id="nutrient-bars"></div>
+    </div>
+
+    <div class="water">
+      <div class="eyebrow">Water</div>
+      <div class="glasses" id="glasses" aria-label="Glasses of water"></div>
+      <span class="water-count" id="water-count"></span>
+    </div>
+
+    <div class="meals" id="meals"></div>
+  </section>
+
+  <!-- CALCULATOR -->
+  <section class="view" id="view-calc" role="tabpanel" aria-labelledby="tab-calc" hidden>
+    <div class="calc-grid">
+      <div class="calc-left">
+        <h1>Nutrition facts calculator</h1>
+        <p class="lede">Add the ingredients of a meal or recipe. The label updates as you go, per serving.</p>
+        <div class="field-row">
+          <label class="field grow">
+            <span>Recipe name</span>
+            <input type="text" id="calc-name" placeholder="e.g. Chicken burrito bowl">
+          </label>
+          <label class="field narrow">
+            <span>Servings</span>
+            <input type="number" id="calc-servings" min="1" step="1" value="1">
+          </label>
+        </div>
+        <div class="ingredients" id="calc-items"></div>
+        <div class="calc-actions">
+          <button class="btn primary" id="calc-add">+ Add ingredient</button>
+          <button class="btn ghost" id="calc-clear">Clear</button>
+        </div>
+        <div class="calc-save">
+          <button class="btn" id="calc-save">Save as my food</button>
+          <label class="field inline">
+            <span>Log 1 serving to</span>
+            <select id="calc-meal"></select>
+          </label>
+          <button class="btn" id="calc-log">Log it</button>
+        </div>
+        <p class="hint" id="calc-msg" role="status"></p>
+      </div>
+      <div class="calc-right">
+        <div id="calc-label"></div>
+        <p class="hint">Total recipe weight: <span id="calc-weight">0 g</span></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- MY FOODS -->
+  <section class="view" id="view-foods" role="tabpanel" aria-labelledby="tab-foods" hidden>
+    <div class="foods-grid">
+      <form class="card form" id="custom-form" autocomplete="off">
+        <h2 id="custom-form-title">Add a custom food</h2>
+        <p class="hint">Copy the numbers from a package label. Enter values for one serving.</p>
+        <input type="hidden" id="cf-id">
+        <label class="field"><span>Name</span><input type="text" id="cf-name" required placeholder="e.g. Grandma's granola"></label>
+        <div class="field-row">
+          <label class="field grow"><span>Serving description</span><input type="text" id="cf-serving" placeholder="1 bar" value="1 serving"></label>
+          <label class="field narrow"><span>Serving weight (g)</span><input type="number" id="cf-grams" min="0.1" step="any" required value="100"></label>
+        </div>
+        <div class="nutrient-inputs" id="cf-nutrients"></div>
+        <div class="row gap">
+          <button class="btn primary" type="submit" id="cf-submit">Save food</button>
+          <button class="btn ghost" type="button" id="cf-cancel" hidden>Cancel edit</button>
+        </div>
+      </form>
+      <div class="card">
+        <h2>Saved foods &amp; recipes</h2>
+        <div id="custom-list" class="custom-list"></div>
+        <h2 class="mt">Look up any food</h2>
+        <p class="hint">Search the built-in database to see its full nutrition label.</p>
+        <button class="btn" id="lookup-btn">Search foods</button>
+        <div id="lookup-label" class="mt"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HISTORY -->
+  <section class="view" id="view-history" role="tabpanel" aria-labelledby="tab-history" hidden>
+    <div class="history-head">
+      <h1>History</h1>
+      <div class="seg" role="group" aria-label="Range">
+        <button class="seg-btn" data-range="7" aria-pressed="true">7 days</button>
+        <button class="seg-btn" data-range="14" aria-pressed="false">14 days</button>
+        <button class="seg-btn" data-range="30" aria-pressed="false">30 days</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="chart-title">Calories per day <span class="legend-goal">- - goal</span></div>
+      <div class="chart" id="chart"></div>
+    </div>
+    <div class="stat-row" id="history-stats"></div>
+    <div class="card table-wrap">
+      <table class="table" id="history-table"></table>
+    </div>
+  </section>
+
+  <!-- GOALS -->
+  <section class="view" id="view-goals" role="tabpanel" aria-labelledby="tab-goals" hidden>
+    <div class="goals-grid">
+      <form class="card form" id="goals-form">
+        <h2>Daily targets</h2>
+        <div class="nutrient-inputs" id="goal-inputs"></div>
+        <label class="field narrow"><span>Water goal (glasses)</span><input type="number" id="goal-water" min="1" max="20" step="1"></label>
+        <div class="row gap"><button class="btn primary" type="submit">Save targets</button></div>
+        <p class="hint" id="goals-msg" role="status"></p>
+      </form>
+      <form class="card form" id="tdee-form">
+        <h2>Estimate my needs</h2>
+        <p class="hint">Uses the Mifflin-St Jeor equation. It is an estimate, not medical advice.</p>
+        <div class="field-row">
+          <label class="field"><span>Sex</span>
+            <select id="t-sex"><option value="f">Female</option><option value="m">Male</option></select></label>
+          <label class="field"><span>Age</span><input type="number" id="t-age" min="14" max="100" value="25"></label>
+          <label class="field"><span>Units</span>
+            <select id="t-units"><option value="metric">kg / cm</option><option value="imperial">lb / in</option></select></label>
+        </div>
+        <div class="field-row">
+          <label class="field"><span id="t-weight-l">Weight (kg)</span><input type="number" id="t-weight" min="20" step="any" value="65"></label>
+          <label class="field"><span id="t-height-l">Height (cm)</span><input type="number" id="t-height" min="50" step="any" value="168"></label>
+        </div>
+        <label class="field"><span>Activity</span>
+          <select id="t-activity">
+            <option value="1.2">Sedentary (desk job, little exercise)</option>
+            <option value="1.375" selected>Light (exercise 1-3 days/week)</option>
+            <option value="1.55">Moderate (3-5 days/week)</option>
+            <option value="1.725">Very active (6-7 days/week)</option>
+            <option value="1.9">Athlete (twice a day)</option>
+          </select></label>
+        <label class="field"><span>Goal</span>
+          <select id="t-goal">
+            <option value="-500">Lose about 0.5 kg (1 lb) per week</option>
+            <option value="-250">Lose slowly</option>
+            <option value="0" selected>Maintain weight</option>
+            <option value="250">Gain slowly</option>
+          </select></label>
+        <div class="tdee-out" id="tdee-out"></div>
+        <div class="row gap"><button class="btn primary" type="submit">Use these as my targets</button></div>
+      </form>
+      <div class="card">
+        <h2>Your data</h2>
+        <p class="hint">Everything is stored in this browser only. Export a backup to move it to another device.</p>
+        <div class="row gap wrap-row">
+          <button class="btn" id="export-btn">Show backup</button>
+          <button class="btn" id="import-btn">Restore backup</button>
+          <button class="btn danger" id="reset-btn">Erase all data</button>
+        </div>
+        <div id="data-panel" class="mt" hidden>
+          <textarea id="data-text" rows="8" spellcheck="false" aria-label="Backup data"></textarea>
+          <div class="row gap mt">
+            <button class="btn" id="data-copy">Copy</button>
+            <button class="btn" id="data-download">Download file</button>
+            <button class="btn primary" id="data-apply" hidden>Restore from this text</button>
+            <label class="btn" id="data-file-l" hidden>Choose file<input type="file" id="data-file" accept=".json,application/json" hidden></label>
+          </div>
+        </div>
+        <div id="reset-confirm" class="confirm mt" hidden>
+          <p>This deletes your log, saved foods and targets from this browser.</p>
+          <div class="row gap"><button class="btn danger" id="reset-yes">Yes, erase everything</button><button class="btn ghost" id="reset-no">Keep my data</button></div>
+        </div>
+        <p class="hint" id="data-msg" role="status"></p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap foot">
+  Nutrient values are approximate (USDA FoodData Central; packaged foods from Open Food Facts). % Daily Value is based on a 2,000 calorie diet.
+</footer>
+
+<!-- Food picker -->
+<div class="modal" id="picker" hidden>
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="picker-title">
+    <div class="modal-head">
+      <h2 id="picker-title">Add food</h2>
+      <button class="btn icon ghost" data-close aria-label="Close">&times;</button>
+    </div>
+    <div class="picker-body">
+      <div class="picker-search" id="picker-search">
+        <input type="search" id="picker-q" placeholder="Search foods (e.g. banana, rice, salmon)" autocomplete="off">
+        <div class="chips" id="picker-cats"></div>
+        <ul class="results" id="picker-results"></ul>
+        <div class="online">
+          <button class="btn small" id="picker-online">Search packaged foods online</button>
+          <button class="btn small ghost" id="picker-quick">Quick add calories</button>
+        </div>
+        <p class="hint" id="picker-online-msg" role="status"></p>
+      </div>
+      <div class="picker-detail" id="picker-detail" hidden>
+        <button class="btn ghost small" id="picker-back">&#8249; Back to results</button>
+        <h3 id="pd-name"></h3>
+        <p class="hint" id="pd-meta"></p>
+        <div class="field-row">
+          <label class="field narrow"><span>Amount</span><input type="number" id="pd-amount" min="0" step="any" value="1"></label>
+          <label class="field grow"><span>Unit</span><select id="pd-unit"></select></label>
+          <label class="field" id="pd-meal-l"><span>Meal</span><select id="pd-meal"></select></label>
+        </div>
+        <div class="pd-preview" id="pd-preview"></div>
+        <button class="btn primary block" id="pd-add">Add</button>
+      </div>
+      <form class="picker-quick" id="picker-quickform" hidden autocomplete="off">
+        <button class="btn ghost small" type="button" id="quick-back">&#8249; Back to search</button>
+        <label class="field"><span>Description</span><input type="text" id="q-name" placeholder="e.g. Restaurant pasta" required></label>
+        <div class="field-row">
+          <label class="field"><span>Calories</span><input type="number" id="q-kcal" min="0" step="any" required></label>
+          <label class="field"><span>Protein (g)</span><input type="number" id="q-pro" min="0" step="any"></label>
+          <label class="field"><span>Carbs (g)</span><input type="number" id="q-carb" min="0" step="any"></label>
+          <label class="field"><span>Fat (g)</span><input type="number" id="q-fat" min="0" step="any"></label>
+        </div>
+        <label class="field" id="q-meal-l"><span>Meal</span><select id="q-meal"></select></label>
+        <button class="btn primary block" type="submit">Add</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="foods.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
