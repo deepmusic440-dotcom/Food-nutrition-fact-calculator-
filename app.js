@@ -1080,10 +1080,56 @@ Include visible sauces, dressings, oils and drinks as their own items. Use typic
     if (!sample) return;
     const limits = await sample.limits().catch(() => null);
     if (!limits || !limits.images) return;
-    const fileInput = $("#photo-file");
-    fileInput.accept = limits.images.mediaTypes.join(",");
+    // Three ways in: camera, photo library, or any image file. Picks from all three collect into one set.
+    const sources = ["#photo-camera", "#photo-library", "#photo-file"].map((id) => $(id));
+    const types = new Set(limits.images.mediaTypes);
+    const maxCount = limits.images.maxCount;
+    let photoFiles = [];
     $("#photo-btn").hidden = false;
     let ctl = null;
+
+    function renderThumbs() {
+      const box = $("#photo-thumbs");
+      for (const img of box.querySelectorAll("img")) URL.revokeObjectURL(img.src);
+      box.innerHTML = "";
+      photoFiles.forEach((f, i) => {
+        const wrap = document.createElement("div");
+        wrap.className = "thumb";
+        const img = document.createElement("img");
+        img.alt = `Meal photo ${i + 1}`;
+        img.src = URL.createObjectURL(f);
+        const rm = document.createElement("button");
+        rm.type = "button";
+        rm.dataset.rmphoto = String(i);
+        rm.setAttribute("aria-label", `Remove photo ${i + 1}`);
+        rm.textContent = "×";
+        wrap.append(img, rm);
+        box.append(wrap);
+      });
+      $("#photo-go").disabled = !photoFiles.length;
+    }
+    function addFiles(list) {
+      const picked = Array.from(list || []);
+      const ok = picked.filter((f) => types.has(f.type) || (!f.type && /\.(jpe?g|png|webp|gif)$/i.test(f.name)));
+      const room = maxCount - photoFiles.length;
+      photoFiles = photoFiles.concat(ok.slice(0, Math.max(0, room)));
+      const msgs = [];
+      if (ok.length < picked.length) msgs.push("Some files were skipped. Use JPEG, PNG, WebP or GIF images (HEIC: export as JPEG first).");
+      if (ok.length > room) msgs.push(`Up to ${maxCount} photos per estimate.`);
+      $("#photo-msg").textContent = msgs.join(" ");
+      $("#photo-results").innerHTML = "";
+      photoItems = [];
+      renderThumbs();
+    }
+    for (const input of sources) {
+      input.addEventListener("change", () => { addFiles(input.files); input.value = ""; });
+    }
+    $("#photo-thumbs").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-rmphoto]");
+      if (!b) return;
+      photoFiles.splice(Number(b.dataset.rmphoto), 1);
+      renderThumbs();
+    });
 
     $("#photo-btn").addEventListener("click", () => {
       $("#photo-panel").hidden = false;
@@ -1091,23 +1137,10 @@ Include visible sauces, dressings, oils and drinks as their own items. Use typic
       $("#photo-panel").scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
     $("#photo-close").addEventListener("click", () => { if (ctl) ctl.abort(); $("#photo-panel").hidden = true; });
-    fileInput.addEventListener("change", () => {
-      const files = Array.from(fileInput.files || []).slice(0, limits.images.maxCount);
-      $("#photo-thumbs").innerHTML = "";
-      for (const f of files) {
-        const img = document.createElement("img");
-        img.alt = "Selected meal photo";
-        img.src = URL.createObjectURL(f);
-        $("#photo-thumbs").append(img);
-      }
-      $("#photo-go").disabled = !files.length;
-      $("#photo-results").innerHTML = "";
-      $("#photo-msg").textContent = files.length > 0 && (fileInput.files.length > files.length) ? `Using the first ${files.length} photos.` : "";
-    });
     $("#photo-stop").addEventListener("click", () => ctl && ctl.abort());
 
     $("#photo-go").addEventListener("click", async () => {
-      const files = Array.from(fileInput.files || []).slice(0, limits.images.maxCount);
+      const files = photoFiles.slice();
       if (!files.length) return;
       ctl = new AbortController();
       $("#photo-go").disabled = true;
@@ -1164,8 +1197,8 @@ Include visible sauces, dressings, oils and drinks as their own items. Use typic
       if (!count) return;
       photoItems = [];
       $("#photo-results").innerHTML = "";
-      $("#photo-file").value = "";
-      $("#photo-thumbs").innerHTML = "";
+      photoFiles = [];
+      renderThumbs();
       $("#photo-note").value = "";
       $("#photo-go").disabled = true;
       $("#photo-msg").textContent = "";
