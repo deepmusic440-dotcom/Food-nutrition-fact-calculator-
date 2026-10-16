@@ -1734,7 +1734,8 @@ If the product name isn't visible, give a short descriptive name. If no nutritio
           if (store.written.has(path)) { store.written.delete(path); delete state.log[k]; delete state.water[k]; delete state.exercise[k]; changed = true; }
           continue;
         }
-        const body = ch.doc.data() || {};
+        // Snapshots arrive frozen; work on a copy so later edits can change it.
+        const body = JSON.parse(JSON.stringify(ch.doc.data() || {}));
         const c = canon({ entries: body.entries || [], water: Array.isArray(body.water) ? body.water : [], exercise: body.exercise || [] });
         if (c === store.written.get(path)) continue; // our own write echoing back
         store.written.set(path, c);
@@ -1750,7 +1751,7 @@ If the product name isn't visible, give a short descriptive name. If no nutritio
     }, () => toast("Lost the live connection. Reload the page to reconnect."));
     db.doc("config/main").onSnapshot((snap) => {
       if (!snap.exists) return;
-      const body = snap.data() || {};
+      const body = JSON.parse(JSON.stringify(snap.data() || {}));
       const c = canon(body);
       if (c === store.written.get("config/main")) return;
       store.written.set("config/main", c);
