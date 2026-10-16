@@ -1521,6 +1521,81 @@ Include visible sauces, dressings, oils and drinks as their own items. Use typic
     if (t) t.textContent = `Total: ${Math.round(kcal).toLocaleString()} kcal`;
   }
 
+  // ---------- Read a Nutrition Facts label into the custom food form ----------
+  const LABEL_PROMPT = `These photos show a packaged food or drink: a Nutrition Facts (or nutrition information) panel, and possibly the front of the package.
+Read the values exactly as printed for ONE serving. Reply with only JSON in this shape:
+{"readable":true,"name":"Greek yogurt, vanilla","brand":"Chobani","servingLabel":"1 container","servingGrams":150,"kcal":120,"pro":12,"carb":15,"fat":0,"fib":0,"sug":13,"sat":0,"chol":10,"na":60,"note":""}
+Rules: kcal in calories; pro, carb, fat, fib, sug, sat in grams; chol and na (sodium) in milligrams. Use 0 for nutrients the label lists as 0 and null for ones it doesn't show.
+servingGrams is the weight in grams printed with the serving size. If only millilitres are printed, use that number and say so in note. If only a per-100 g column exists, use servingLabel "100 g" and servingGrams 100.
+If the product name isn't visible, give a short descriptive name. If no nutrition panel is readable, return {"readable":false,"note":"what went wrong"}.`;
+
+  function setupLabelScan() {
+    let sample = null, limits = null;
+    const ready = (async () => {
+      if (!window.claude || typeof window.claude.use !== "function") return;
+      try { sample = await window.claude.use("sample"); } catch (e) { sample = null; }
+      if (sample) limits = await sample.limits().catch(() => null);
+    })();
+    const msg = (t) => ($("#lbl-msg").textContent = t);
+    let ctl = null;
+    $("#lbl-stop").addEventListener("click", () => ctl && ctl.abort());
+
+    async function readLabel(fileList) {
+      const okTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+      let files = Array.from(fileList || []).filter((f) => okTypes.has(f.type) || (limits && limits.images && limits.images.mediaTypes.includes(f.type)));
+      if (!files.length) { msg("Use a JPEG, PNG, WebP or GIF photo of the label."); return; }
+      msg("Checking that label reading is available…");
+      await ready;
+      if (!sample || !limits || !limits.images) {
+        msg(window.claude
+          ? "Label reading isn't available in this view of the app. Send the label photo to Claude in your chat and it will add the food for you, or type the numbers below."
+          : "Label reading only works in the version hosted on claude.ai. Type the numbers below instead.");
+        return;
+      }
+      files = files.slice(0, limits.images.maxCount);
+      ctl = new AbortController();
+      $("#lbl-stop").hidden = false;
+      msg("Reading the label… this usually takes 10 to 30 seconds.");
+      try {
+        const out = await sample.json(LABEL_PROMPT, { images: files, signal: ctl.signal });
+        if (!out || out.readable === false) { msg((out && out.note ? String(out.note) + " " : "") + "Try a sharper, closer photo of the Nutrition Facts panel."); return; }
+        const num = (v) => (v == null || v === "" || isNaN(Number(v)) ? null : Math.max(0, Number(v)));
+        const name = String(out.name || "").trim().slice(0, 100);
+        const brand = String(out.brand || "").trim().slice(0, 60);
+        resetCustomForm();
+        $("#cf-name").value = brand && !name.toLowerCase().includes(brand.toLowerCase()) ? `${name} (${brand})` : name;
+        $("#cf-serving").value = String(out.servingLabel || "1 serving").slice(0, 60);
+        const g = num(out.servingGrams);
+        $("#cf-grams").value = g > 0 ? round(g, 1) : 100;
+        const missing = [];
+        for (const k of NK) {
+          const v = num(out[k]);
+          $("#cf-" + k).value = v == null ? "" : round(v, k === "kcal" || k === "na" || k === "chol" ? 0 : 1);
+          if (v == null) missing.push(NBY[k].label.toLowerCase());
+        }
+        for (const el of $$("#custom-form input:not([type=hidden]):not([type=file])")) {
+          el.classList.remove("cf-filled"); void el.offsetWidth; el.classList.add("cf-filled");
+        }
+        msg(`Filled in from the label. Check the numbers, then press Save food.${!(g > 0) ? " The serving weight wasn't printed, so enter it in grams." : ""}${missing.length ? ` Not on the label: ${missing.join(", ")}.` : ""}${out.note ? " " + String(out.note) : ""}`);
+        $("#cf-name").focus();
+      } catch (e) {
+        const code = e && e.code;
+        msg(code === "cancelled" ? "Stopped." :
+          code === "not_granted" || code === "sampling_disabled" ? "Label reading needs permission to use Claude. You can allow it from this page's permissions." :
+          code === "rate_limited" ? "Too many requests right now. Try again in a minute." :
+          code === "image_rejected" ? "That image couldn't be read. Try a JPEG or PNG under 20 MB." :
+          "The label couldn't be read this time. Try again, or type the numbers below.");
+      } finally {
+        $("#lbl-stop").hidden = true;
+        ctl = null;
+      }
+    }
+    for (const id of ["#lbl-camera", "#lbl-library", "#lbl-file"]) {
+      const input = $(id);
+      input.addEventListener("change", () => { const f = input.files; readLabel(f); input.value = ""; });
+    }
+  }
+
   // ---------- Sample day on first run ----------
   function seedExample() {
     const t = todayKey();
@@ -1640,4 +1715,5 @@ Include visible sauces, dressings, oils and drinks as their own items. Use typic
   if (firstRun) toast("Loaded a sample day so you can see how it works. Remove entries any time.");
   if (store.mode === "pending") connectDb();
   setupPhoto();
+  setupLabelScan();
 })();

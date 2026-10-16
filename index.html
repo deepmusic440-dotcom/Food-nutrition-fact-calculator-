@@ -168,7 +168,17 @@
     <div class="foods-grid">
       <form class="card form" id="custom-form" autocomplete="off">
         <h2 id="custom-form-title">Add a custom food</h2>
-        <p class="hint">Copy the numbers from a package label. Enter values for one serving.</p>
+        <div class="label-scan">
+          <b>Fill in from a label photo</b>
+          <p class="hint">Photograph the Nutrition Facts panel. Add a photo of the front too if you want the product name read.</p>
+          <div class="photo-sources">
+            <label class="btn photo-src">Take photo<input type="file" id="lbl-camera" class="visually-hidden" accept="image/*" capture="environment"></label>
+            <label class="btn photo-src">Choose existing<input type="file" id="lbl-library" class="visually-hidden" accept="image/*" multiple></label>
+            <label class="btn photo-src">Upload file<input type="file" id="lbl-file" class="visually-hidden" accept=".jpg,.jpeg,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif" multiple></label>
+          </div>
+          <div class="row gap"><p class="hint" id="lbl-msg" role="status"></p><button class="btn ghost small" type="button" id="lbl-stop" hidden>Stop</button></div>
+        </div>
+        <p class="hint">Or type the numbers from the label. Enter values for one serving.</p>
         <input type="hidden" id="cf-id">
         <label class="field"><span>Name</span><input type="text" id="cf-name" required placeholder="e.g. Grandma's granola"></label>
         <div class="field-row">
