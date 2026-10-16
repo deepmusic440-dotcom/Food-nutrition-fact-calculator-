@@ -331,11 +331,34 @@
   function renderWater() {
     const oz = waterOz(currentDay);
     const goalOz = Math.round((state.waterGoal || 8) * GLASS_OZ);
-    $("#water-count").textContent = `${Math.round(oz)} of ${goalOz} fl oz`;
-    $("#water-fill").style.width = `${goalOz > 0 ? Math.min(100, (oz / goalOz) * 100) : 0}%`;
+    const glasses = oz / GLASS_OZ;
+    const count = Math.max(Math.ceil(goalOz / GLASS_OZ), Math.ceil(glasses) + 1);
+    $("#glasses").innerHTML = Array.from({ length: count }, (_, i) => {
+      const fill = Math.max(0, Math.min(1, glasses - i));
+      return `<button type="button" class="glass${fill > 0 ? " on" : ""}" style="--fill:${fill}" data-glass="${i}"
+        aria-label="${fill >= 1 ? `Remove ${GLASS_OZ} fl oz` : `Add ${GLASS_OZ} fl oz`}" title="${fill >= 1 ? "Tap to remove 8 oz" : "Tap to add 8 oz"}"></button>`;
+    }).join("");
+    $("#water-count").textContent = `${Math.round(oz)} of ${goalOz} fl oz · ${round(glasses, 1)} of ${round(goalOz / GLASS_OZ, 1)} glasses`;
     $("#water-undo").hidden = !(state.water[currentDay] || []).length;
   }
-
+  // Take `oz` off the most recent amounts (a full glass tapped off).
+  function removeWater(oz) {
+    const list = state.water[currentDay] || [];
+    let need = oz;
+    while (need > 0 && list.length) {
+      const last = list.pop();
+      if (last > need) { list.push(Math.round((last - need) * 10) / 10); need = 0; } else need -= last;
+    }
+    if (!list.length) delete state.water[currentDay];
+    save();
+    renderWater();
+  }
+  $("#glasses").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-glass]");
+    if (!b) return;
+    const full = waterOz(currentDay) / GLASS_OZ - Number(b.dataset.glass) >= 1;
+    if (full) removeWater(GLASS_OZ); else addWater(GLASS_OZ);
+  });
   // ---------- Exercise ----------
   // MET values from the Compendium of Physical Activities; kcal = MET x kg x hours.
   const ACTIVITIES = [

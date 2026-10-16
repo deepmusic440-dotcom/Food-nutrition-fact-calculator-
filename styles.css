@@ -200,8 +200,14 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
 .water-count { font-size: .82rem; color: var(--muted); }
 #ex-hint { margin-top: 6px; }
 .side-grid .exercise-card { grid-row: span 2; }
-.water-track { height: 10px; border-radius: 5px; margin: 4px 0 12px; }
-.water-track .bar-fill { background: var(--pro); border-radius: 5px; }
+.glasses { display: flex; gap: 5px; flex-wrap: wrap; margin: 4px 0 12px; }
+.glass {
+  --fill: 0; width: 24px; height: 30px; padding: 0; cursor: pointer;
+  border: 1.5px solid var(--line); border-radius: 2px 2px 7px 7px;
+  background: linear-gradient(to top, var(--pro) calc(var(--fill) * 85%), transparent 0);
+}
+.glass.on { border-color: var(--pro); }
+.glass:hover { border-color: var(--pro); }
 .water-quick { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 
 .meals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 12px; }
