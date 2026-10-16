@@ -1169,6 +1169,16 @@
     toast("Targets saved");
   });
 
+  // Calorie change from maintenance and protein per kg of body weight for each goal.
+  // Protein follows the ISSN range of 1.6-2.2 g/kg for people doing resistance training.
+  const GOAL_PLANS = {
+    "lose": { kcal: -500, proKg: 1.8, fatPct: 0.28, note: "Higher protein helps you keep muscle while losing fat." },
+    "lose-slow": { kcal: -250, proKg: 1.8, fatPct: 0.28, note: "A gentler deficit that's easier to stick with." },
+    "maintain": { kcal: 0, proKg: 1.6, fatPct: 0.28, note: "" },
+    "muscle": { kcal: 300, proKg: 2.0, fatPct: 0.25, note: "A small surplus with high protein. Lift weights at least 3 days a week, and aim to gain about 0.25 to 0.5% of your body weight per week. If the trend on History rises faster, lower calories by 100 to 200." },
+    "recomp": { kcal: -200, proKg: 2.2, fatPct: 0.25, note: "A slight deficit with very high protein. Works best if you're new to lifting or returning after a break. Train each muscle group at least twice a week, and judge progress by strength and measurements as much as the scale." },
+    "gain": { kcal: 500, proKg: 1.6, fatPct: 0.28, note: "A larger surplus for gaining weight. Without strength training, more of it will be fat." },
+  };
   function calcTDEE() {
     const imperial = $("#t-units").value === "imperial";
     let kg = Number($("#t-weight").value), cm = Number($("#t-height").value);
@@ -1178,10 +1188,11 @@
     const bmr = 10 * kg + 6.25 * cm - 5 * age + ($("#t-sex").value === "m" ? 5 : -161);
     const tdee = bmr * Number($("#t-activity").value);
     const floor = $("#t-sex").value === "m" ? 1500 : 1200;
-    const target = Math.max(floor, Math.round((tdee + Number($("#t-goal").value)) / 10) * 10);
-    // Protein 1.6 g/kg (capped at 35% of kcal), fat 28% of kcal, rest carbs
-    const pro = Math.min(Math.round(1.6 * kg), Math.round((target * 0.35) / 4));
-    const fat = Math.round((target * 0.28) / 9);
+    const plan = GOAL_PLANS[$("#t-goal").value] || GOAL_PLANS.maintain;
+    const target = Math.max(floor, Math.round((tdee + plan.kcal) / 10) * 10);
+    // Protein by goal (capped at 40% of kcal), fat as a share of kcal, rest carbs
+    const pro = Math.min(Math.round(plan.proKg * kg), Math.round((target * 0.4) / 4));
+    const fat = Math.round((target * plan.fatPct) / 9);
     const carb = Math.max(0, Math.round((target - pro * 4 - fat * 9) / 4));
     return { bmr: Math.round(bmr), tdee: Math.round(tdee), target, pro, fat, carb, kg };
   }
@@ -1190,6 +1201,10 @@
     $("#t-weight-l").textContent = imperial ? "Weight (lb)" : "Weight (kg)";
     $("#t-height-l").textContent = imperial ? "Height (in)" : "Height (cm)";
     const r = calcTDEE();
+    const plan = GOAL_PLANS[$("#t-goal").value] || GOAL_PLANS.maintain;
+    $("#t-goal-note").textContent = plan.note
+      ? `${plan.kcal > 0 ? "+" : plan.kcal < 0 ? "−" : ""}${Math.abs(plan.kcal)} kcal vs maintenance · protein ${plan.proKg} g per kg. ${plan.note}`
+      : "";
     $("#tdee-out").innerHTML = r
       ? [["BMR", r.bmr + " kcal"], ["Maintenance", r.tdee + " kcal"], ["Daily target", r.target + " kcal"], ["Protein", r.pro + " g"], ["Carbs", r.carb + " g"], ["Fat", r.fat + " g"]]
         .map(([l, v]) => `<div><span>${l}</span><b>${v}</b></div>`).join("")

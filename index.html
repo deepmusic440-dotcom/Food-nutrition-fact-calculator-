@@ -243,11 +243,14 @@
           </select></label>
         <label class="field"><span>Goal</span>
           <select id="t-goal">
-            <option value="-500">Lose about 0.5 kg (1 lb) per week</option>
-            <option value="-250">Lose slowly</option>
-            <option value="0" selected>Maintain weight</option>
-            <option value="250">Gain slowly</option>
+            <option value="lose">Lose about 0.5 kg (1 lb) per week</option>
+            <option value="lose-slow">Lose slowly</option>
+            <option value="maintain" selected>Maintain weight</option>
+            <option value="muscle">Build muscle (lean bulk)</option>
+            <option value="recomp">Build muscle and lose fat (recomposition)</option>
+            <option value="gain">Gain weight</option>
           </select></label>
+        <p class="hint" id="t-goal-note"></p>
         <div class="tdee-out" id="tdee-out"></div>
         <div class="row gap"><button class="btn primary" type="submit">Use these as my targets</button></div>
       </form>
