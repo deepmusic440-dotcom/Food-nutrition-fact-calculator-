@@ -187,10 +187,11 @@
         </div>
         <div class="nutrient-inputs" id="cf-nutrients"></div>
         <div class="row gap">
-          <button class="btn primary" type="submit" id="cf-submit">Save food</button>
+          <button class="btn primary" type="button" id="cf-submit">Save food</button>
           <button class="btn ghost" type="button" id="cf-cancel" hidden>Cancel edit</button>
         </div>
         <p class="form-error" id="cf-error" role="alert" hidden></p>
+        <p class="form-ok" id="cf-status" role="status" hidden></p>
       </form>
       <div class="card">
         <h2>Saved foods &amp; recipes</h2>
@@ -307,6 +308,7 @@
 
 <footer class="wrap foot">
   Nutrient values are approximate (USDA FoodData Central; packaged foods from Open Food Facts). % Daily Value is based on a 2,000 calorie diet.
+  <span class="app-version">App version 15</span>
 </footer>
 
 <!-- Food picker -->

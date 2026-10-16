@@ -142,7 +142,12 @@
     if (cc !== store.written.get("config/main")) { store.written.set("config/main", cc); writes.push(() => store.db.doc("config/main").set(JSON.parse(JSON.stringify(cb)))); }
     // One write at a time, in order
     for (const w of writes) {
-      store.chain = store.chain.then(w).catch((e) => toast(e && e.code === "quota_exceeded" ? "Storage is full. Delete old days to keep saving." : "Couldn't save that change. Check your connection."));
+      store.chain = store.chain.then(w).catch((e) => {
+        const code = (e && e.code) || "unknown";
+        store.lastError = code;
+        toast(code === "quota_exceeded" ? "Storage is full. Delete old days to keep saving." : `Couldn't save that change (${code}). Check your connection and try again.`);
+        document.dispatchEvent(new CustomEvent("nutrilog:save-error", { detail: code }));
+      });
     }
   }
 
@@ -981,8 +986,25 @@
     setTimeout(() => input.focus({ preventScroll: true }), 300);
   }
   $("#custom-form").addEventListener("input", (e) => { if (e.target.classList.contains("invalid")) formError(null); });
-  $("#custom-form").addEventListener("submit", (e) => {
-    e.preventDefault();
+  function cfStatus(text) {
+    const el = $("#cf-status");
+    el.textContent = text || "";
+    el.hidden = !text;
+  }
+  $("#cf-submit").addEventListener("click", () => {
+    try { saveCustomFood(); } catch (err) {
+      formError($("#cf-name"), `Something went wrong while saving (${err && err.message ? err.message : err}). Send this message to Claude in chat.`);
+    }
+  });
+  $("#custom-form").addEventListener("submit", (e) => { e.preventDefault(); $("#cf-submit").click(); });
+  $("#custom-form").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.matches("input[type=text]")) { e.preventDefault(); $("#cf-submit").click(); }
+  });
+  document.addEventListener("nutrilog:save-error", (e) => {
+    if (!$("#cf-status").hidden) { cfStatus(""); formError($("#cf-submit"), `Your food is on this screen but didn't reach your saved data (${e.detail}). Check your connection and press Save food again.`); }
+  });
+  function saveCustomFood() {
+    cfStatus("");
     const name = $("#cf-name").value.trim();
     if (!name) return formError($("#cf-name"), "Enter a name for this food, then press Save food.");
     const g = parseAmount($("#cf-grams").value);
@@ -1013,7 +1035,8 @@
     resetCustomForm();
     renderCustomList();
     toast(existing ? "Food updated" : "Food saved");
-  });
+    cfStatus(`Saved “${food.name}”. It's in your list below and shows up when you search to log a meal.`);
+  }
 
   function renderCustomList() {
     const box = $("#custom-list");
