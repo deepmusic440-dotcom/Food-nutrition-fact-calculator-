@@ -199,12 +199,10 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
 .weigh-form .field { flex: 0 1 160px; }
 .water-count { font-size: .82rem; color: var(--muted); }
 #ex-hint { margin-top: 6px; }
-.glasses { display: flex; gap: 4px; flex-wrap: wrap; }
-.glass {
-  width: 22px; height: 28px; border: 1.5px solid var(--line); border-radius: 2px 2px 6px 6px;
-  background: transparent; cursor: pointer; padding: 0; position: relative; overflow: hidden;
-}
-.glass.full { border-color: var(--pro); background: linear-gradient(to top, var(--pro) 75%, transparent 75%); }
+.side-grid .exercise-card { grid-row: span 2; }
+.water-track { height: 10px; border-radius: 5px; margin: 4px 0 12px; }
+.water-track .bar-fill { background: var(--pro); border-radius: 5px; }
+.water-quick { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 
 .meals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 12px; }
 .meal { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; display: flex; flex-direction: column; }
@@ -386,6 +384,7 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
 
 @media (max-width: 820px) {
   .calc-grid, .budget, .side-grid { grid-template-columns: minmax(0, 1fr); }
+  .side-grid .exercise-card { grid-row: auto; }
   .macro-rings { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 16px; }
   .calc-right { position: static; }
   .meals { grid-template-columns: minmax(0, 1fr); }

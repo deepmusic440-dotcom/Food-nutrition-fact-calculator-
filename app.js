@@ -81,6 +81,12 @@
     } catch (e) { /* storage unavailable */ }
     return null;
   }
+  function waterList(v) {
+    if (Array.isArray(v)) return v.map(Number).filter((x) => x > 0);
+    const n = Number(v) || 0;
+    return n > 0 ? [n * GLASS_OZ] : [];
+  }
+  const waterOz = (k) => (state.water[k] || []).reduce((a, x) => a + x, 0);
   function normalize(s) {
     const d = defaultState();
     const out = { ...d, ...s };
@@ -91,6 +97,8 @@
     if (!Array.isArray(out.recent)) out.recent = [];
     if (typeof out.log !== "object" || !out.log) out.log = {};
     if (typeof out.water !== "object" || !out.water) out.water = {};
+    // Water is a list of fl oz amounts per day; older saves stored a glass count.
+    for (const k of Object.keys(out.water)) out.water[k] = waterList(out.water[k]);
     if (typeof out.exercise !== "object" || !out.exercise) out.exercise = {};
     if (typeof out.weights !== "object" || !out.weights) out.weights = {};
     if (out.units !== "metric") out.units = "imperial";
@@ -101,7 +109,7 @@
   // In db mode each day is one document `days/<YYYY-MM-DD>` and settings live in `config/main`.
   const store = { mode: window.claude && typeof window.claude.use === "function" ? "pending" : "local", db: null, written: new Map(), timer: null, chain: Promise.resolve() };
   const canon = (v) => JSON.stringify(v, (k, x) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map((kk) => [kk, x[kk]])) : x));
-  const dayBody = (k) => ({ entries: state.log[k] || [], water: state.water[k] || 0, exercise: state.exercise[k] || [] });
+  const dayBody = (k) => ({ entries: state.log[k] || [], water: state.water[k] || [], exercise: state.exercise[k] || [] });
   const configBody = () => ({ goals: state.goals, waterGoal: state.waterGoal, units: state.units, weights: state.weights, custom: state.custom, recent: state.recent, draft: state.draft });
 
   function save() {
@@ -120,7 +128,7 @@
     for (const k of days) {
       const path = "days/" + k;
       const body = dayBody(k);
-      const empty = !body.entries.length && !body.water && !body.exercise.length;
+      const empty = !body.entries.length && !body.water.length && !body.exercise.length;
       const prev = store.written.get(path);
       if (empty) {
         if (prev !== undefined) { store.written.delete(path); writes.push(() => store.db.doc(path).delete()); }
@@ -321,14 +329,13 @@
   }
 
   function renderWater() {
-    const n = state.water[currentDay] || 0;
-    const goal = state.waterGoal || 8;
-    const goalGlasses = Math.ceil(goal);
-    const total = Math.max(goalGlasses, n + 1);
-    $("#glasses").innerHTML = Array.from({ length: total }, (_, i) =>
-      `<button class="glass${i < n ? " full" : ""}" data-glass="${i}" aria-label="${i < n ? "Remove" : "Add"} glass ${i + 1}"></button>`).join("");
-    $("#water-count").textContent = `${n} of ${round(goal, 1)} glasses · ${n * GLASS_OZ} of ${Math.round(goal * GLASS_OZ)} fl oz`;
+    const oz = waterOz(currentDay);
+    const goalOz = Math.round((state.waterGoal || 8) * GLASS_OZ);
+    $("#water-count").textContent = `${Math.round(oz)} of ${goalOz} fl oz`;
+    $("#water-fill").style.width = `${goalOz > 0 ? Math.min(100, (oz / goalOz) * 100) : 0}%`;
+    $("#water-undo").hidden = !(state.water[currentDay] || []).length;
   }
+
   // ---------- Exercise ----------
   // MET values from the Compendium of Physical Activities; kcal = MET x kg x hours.
   const ACTIVITIES = [
@@ -433,15 +440,31 @@
     renderToday();
   });
 
-  $("#glasses").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-glass]");
-    if (!b) return;
-    const i = Number(b.dataset.glass);
-    const n = state.water[currentDay] || 0;
-    state.water[currentDay] = i < n ? i : i + 1;
-    if (!state.water[currentDay]) delete state.water[currentDay];
+  function addWater(oz) {
+    if (!(oz > 0)) return;
+    (state.water[currentDay] || (state.water[currentDay] = [])).push(Math.round(oz * 10) / 10);
     save();
     renderWater();
+    toast(`Added ${oz} fl oz of water`);
+  }
+  $("#water-quick").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-oz]");
+    if (b) addWater(Number(b.dataset.oz));
+  });
+  $("#water-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const v = Number($("#water-input").value);
+    if (!(v > 0)) { $("#water-input").focus(); return; }
+    addWater(v);
+    $("#water-input").value = "";
+  });
+  $("#water-undo").addEventListener("click", () => {
+    const list = state.water[currentDay] || [];
+    const last = list.pop();
+    if (!list.length) delete state.water[currentDay];
+    save();
+    renderWater();
+    if (last) toast(`Removed ${last} fl oz`);
   });
 
   $("#meals").addEventListener("click", (e) => {
@@ -1495,7 +1518,7 @@ Include visible sauces, dressings, oils and drinks as their own items. Use typic
       [["b:greek-yogurt-plain-nonfat", 1, "breakfast"], ["b:granola", 1, "breakfast"], ["b:cheeseburger-fast-food", 1, "lunch"], ["b:french-fries-fast-food", 1, "lunch"], ["b:lentils-cooked", 1, "dinner"], ["b:white-rice-cooked", 1, "dinner"]],
     ];
     plans.forEach((plan, i) => plan.forEach(([id, amt, meal]) => add(id, amt, "serving", meal, addDays(t, -(i + 1)))));
-    state.water[t] = 3;
+    state.water[t] = [16, 8];
     state.exercise[t] = [{ id: uid(), name: "Walking, brisk", min: 40, kcal: 210 }];
     // Two weeks of example weigh-ins drifting down about half a pound a week
     let lb = 162.4;
@@ -1559,12 +1582,13 @@ Include visible sauces, dressings, oils and drinks as their own items. Use typic
           continue;
         }
         const body = ch.doc.data() || {};
-        const c = canon({ entries: body.entries || [], water: body.water || 0, exercise: body.exercise || [] });
+        const c = canon({ entries: body.entries || [], water: Array.isArray(body.water) ? body.water : [], exercise: body.exercise || [] });
         if (c === store.written.get(path)) continue; // our own write echoing back
         store.written.set(path, c);
         const entries = Array.isArray(body.entries) ? body.entries.filter((e) => e && e.n) : [];
         if (entries.length) state.log[k] = entries; else delete state.log[k];
-        if (body.water) state.water[k] = Number(body.water) || 0; else delete state.water[k];
+        const w = waterList(body.water);
+        if (w.length) state.water[k] = w; else delete state.water[k];
         const ex = Array.isArray(body.exercise) ? body.exercise.filter((x) => x && x.kcal >= 0) : [];
         if (ex.length) state.exercise[k] = ex; else delete state.exercise[k];
         changed = true;

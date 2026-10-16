@@ -94,10 +94,23 @@
         </form>
         <p class="hint" id="ex-hint"></p>
       </div>
-      <div class="card body-card">
+      <div class="card water-card">
         <div class="card-head"><h2>Water</h2><span class="water-count" id="water-count"></span></div>
-        <div class="glasses" id="glasses" aria-label="Glasses of water"></div>
-        <div class="card-head mt"><h2>Weigh-in</h2><span class="hint" id="weight-summary"></span></div>
+        <div class="bar-track water-track"><div class="bar-fill" id="water-fill"></div></div>
+        <div class="water-quick" id="water-quick">
+          <button class="btn small" type="button" data-oz="8">+8 oz</button>
+          <button class="btn small" type="button" data-oz="12">+12 oz</button>
+          <button class="btn small" type="button" data-oz="16">+16 oz</button>
+          <button class="btn small" type="button" data-oz="24">+24 oz</button>
+        </div>
+        <form class="weigh-form" id="water-form" autocomplete="off">
+          <label class="field"><span>Other amount (fl oz)</span><input type="number" id="water-input" min="1" max="200" step="1" placeholder="e.g. 20"></label>
+          <button class="btn" type="submit">Add</button>
+          <button class="btn ghost small" type="button" id="water-undo" hidden>Undo last</button>
+        </form>
+      </div>
+      <div class="card weigh-card">
+        <div class="card-head"><h2>Weigh-in</h2><span class="hint" id="weight-summary"></span></div>
         <form class="weigh-form" id="weigh-form" autocomplete="off">
           <label class="field"><span id="weigh-label">Weight (lb)</span><input type="number" id="weigh-input" min="20" max="1500" step="0.1"></label>
           <button class="btn" type="submit" id="weigh-save">Save</button>
