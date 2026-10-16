@@ -948,10 +948,11 @@
 
   // ---------- MY FOODS ----------
   $("#cf-nutrients").innerHTML = NUTRIENTS.map((n) =>
-    `<label class="field"><span>${n.label} (${n.unit})</span><input type="number" min="0" step="any" id="cf-${n.key}"${n.key === "kcal" ? " required" : ""}></label>`).join("");
+    `<label class="field"><span>${n.label} (${n.unit})</span><input type="text" inputmode="decimal" id="cf-${n.key}"></label>`).join("");
 
   function resetCustomForm() {
     $("#custom-form").reset();
+    formError(null);
     $("#cf-id").value = "";
     $("#cf-serving").value = "1 serving";
     $("#cf-grams").value = 100;
@@ -960,17 +961,47 @@
     $("#cf-cancel").hidden = true;
   }
   $("#cf-cancel").addEventListener("click", resetCustomForm);
+  // Accepts "0,5", " 12 ", "1,200" style input that iPhone keyboards produce in some regions.
+  function parseAmount(str) {
+    let t = String(str ?? "").trim().replace(/\s+/g, "");
+    if (!t) return null;
+    if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(t)) t = t.replace(/,/g, ""); // 1,200 -> 1200
+    else t = t.replace(",", ".");
+    const n = Number(t);
+    return Number.isFinite(n) && n >= 0 ? n : NaN;
+  }
+  function formError(input, text) {
+    const err = $("#cf-error");
+    $$("#custom-form .invalid").forEach((el) => el.classList.remove("invalid"));
+    if (!input) { err.hidden = true; err.textContent = ""; return; }
+    input.classList.add("invalid");
+    err.textContent = text;
+    err.hidden = false;
+    input.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => input.focus({ preventScroll: true }), 300);
+  }
+  $("#custom-form").addEventListener("input", (e) => { if (e.target.classList.contains("invalid")) formError(null); });
   $("#custom-form").addEventListener("submit", (e) => {
     e.preventDefault();
-    const g = Number($("#cf-grams").value);
-    if (!(g > 0)) return;
+    const name = $("#cf-name").value.trim();
+    if (!name) return formError($("#cf-name"), "Enter a name for this food, then press Save food.");
+    const g = parseAmount($("#cf-grams").value);
+    if (!(g > 0)) return formError($("#cf-grams"), "Enter the serving weight in grams (for example 30). It's on the label next to the serving size.");
+    const vals = {};
+    for (const k of NK) {
+      const v = parseAmount($("#cf-" + k).value);
+      if (Number.isNaN(v)) return formError($("#cf-" + k), `${NBY[k].label} needs to be a number, like 12 or 0.5.`);
+      vals[k] = v || 0;
+    }
+    if (parseAmount($("#cf-kcal").value) == null) return formError($("#cf-kcal"), "Enter the calories per serving.");
+    formError(null);
     const per100 = {};
-    for (const k of NK) per100[k] = ((Number($("#cf-" + k).value) || 0) / g) * 100;
+    for (const k of NK) per100[k] = (vals[k] / g) * 100;
     const id = $("#cf-id").value;
     const existing = id && state.custom.find((f) => f.id === id);
     const food = {
       id: id || "c:" + uid(),
-      name: $("#cf-name").value.trim(),
+      name,
       cat: "Mine",
       source: "custom",
       recipe: existing ? existing.recipe : false,
@@ -1563,7 +1594,8 @@ If the product name isn't visible, give a short descriptive name. If no nutritio
         const name = String(out.name || "").trim().slice(0, 100);
         const brand = String(out.brand || "").trim().slice(0, 60);
         resetCustomForm();
-        $("#cf-name").value = brand && !name.toLowerCase().includes(brand.toLowerCase()) ? `${name} (${brand})` : name;
+        const fullName = brand && !name.toLowerCase().includes(brand.toLowerCase()) ? `${name} (${brand})`.trim() : name;
+        $("#cf-name").value = fullName.replace(/^\((.*)\)$/, "$1") || "Scanned product";
         $("#cf-serving").value = String(out.servingLabel || "1 serving").slice(0, 60);
         const g = num(out.servingGrams);
         $("#cf-grams").value = g > 0 ? round(g, 1) : 100;

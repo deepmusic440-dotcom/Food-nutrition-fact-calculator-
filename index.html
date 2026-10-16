@@ -166,7 +166,7 @@
   <!-- MY FOODS -->
   <section class="view" id="view-foods" role="tabpanel" aria-labelledby="tab-foods" hidden>
     <div class="foods-grid">
-      <form class="card form" id="custom-form" autocomplete="off">
+      <form class="card form" id="custom-form" autocomplete="off" novalidate>
         <h2 id="custom-form-title">Add a custom food</h2>
         <div class="label-scan">
           <b>Fill in from a label photo</b>
@@ -180,16 +180,17 @@
         </div>
         <p class="hint">Or type the numbers from the label. Enter values for one serving.</p>
         <input type="hidden" id="cf-id">
-        <label class="field"><span>Name</span><input type="text" id="cf-name" required placeholder="e.g. Grandma's granola"></label>
+        <label class="field"><span>Name</span><input type="text" id="cf-name" placeholder="e.g. Grandma's granola"></label>
         <div class="field-row">
           <label class="field grow"><span>Serving description</span><input type="text" id="cf-serving" placeholder="1 bar" value="1 serving"></label>
-          <label class="field narrow"><span>Serving weight (g)</span><input type="number" id="cf-grams" min="0.1" step="any" required value="100"></label>
+          <label class="field narrow"><span>Serving weight (g)</span><input type="text" inputmode="decimal" id="cf-grams" value="100"></label>
         </div>
         <div class="nutrient-inputs" id="cf-nutrients"></div>
         <div class="row gap">
           <button class="btn primary" type="submit" id="cf-submit">Save food</button>
           <button class="btn ghost" type="button" id="cf-cancel" hidden>Cancel edit</button>
         </div>
+        <p class="form-error" id="cf-error" role="alert" hidden></p>
       </form>
       <div class="card">
         <h2>Saved foods &amp; recipes</h2>
