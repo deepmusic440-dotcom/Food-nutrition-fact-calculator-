@@ -53,9 +53,9 @@
 
     <div class="card photo-panel" id="photo-panel">
       <div class="photo-head">
-        <h2>Log a meal from a photo</h2>
+        <h2>Log a meal from a photo or description</h2>
       </div>
-      <p class="hint">Snap or upload a photo of your meal to estimate its nutrition.</p>
+      <p class="hint">Snap or upload a photo, describe what you ate, or both. Claude estimates the nutrition.</p>
       <div class="field-row">
         <div class="field grow">
           <span>Add a photo</span>
@@ -67,13 +67,12 @@
         </div>
         <label class="field"><span>Meal</span><select id="photo-meal"></select></label>
       </div>
-      <div class="photo-details" id="photo-details" hidden>
-        <div class="photo-thumbs" id="photo-thumbs"></div>
-        <label class="field"><span>Details that help (optional)</span><input type="text" id="photo-note" placeholder="e.g. cooked in olive oil, I ate about half"></label>
-        <div class="row gap">
-          <button class="btn primary" id="photo-go" disabled>Estimate nutrition</button>
-          <button class="btn ghost" id="photo-stop" hidden>Stop</button>
-        </div>
+      <div class="photo-thumbs" id="photo-thumbs"></div>
+      <label class="field"><span id="photo-note-label">Or describe what you ate</span>
+        <textarea id="photo-note" rows="3" placeholder="e.g. 2 scrambled eggs with cheddar, 1 slice of whole wheat toast with butter, black coffee"></textarea></label>
+      <div class="row gap">
+        <button class="btn primary" id="photo-go" disabled>Estimate nutrition</button>
+        <button class="btn ghost" id="photo-stop" hidden>Stop</button>
       </div>
       <p class="hint" id="photo-msg" role="status"></p>
       <div id="photo-results"></div>
@@ -308,7 +307,7 @@
 
 <footer class="wrap foot">
   Nutrient values are approximate (USDA FoodData Central; packaged foods from Open Food Facts). % Daily Value is based on a 2,000 calorie diet.
-  <span class="app-version">App version 16</span>
+  <span class="app-version">App version 17</span>
 </footer>
 
 <!-- Food picker -->
@@ -354,6 +353,29 @@
         <label class="field" id="q-meal-l"><span>Meal</span><select id="q-meal"></select></label>
         <button class="btn primary block" type="submit">Add</button>
       </form>
+    </div>
+  </div>
+</div>
+
+<!-- Copy food from another day -->
+<div class="modal" id="copy-modal" hidden>
+  <div class="modal-backdrop" data-cclose></div>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="copy-title">
+    <div class="modal-head">
+      <h2 id="copy-title">Copy food from another day</h2>
+      <button class="btn icon ghost" data-cclose aria-label="Close">&times;</button>
+    </div>
+    <div class="picker-body copy-body">
+      <div class="chips" id="copy-days" role="group" aria-label="Pick a day"></div>
+      <div class="field-row">
+        <label class="field"><span>Day</span><input type="date" id="copy-date"></label>
+        <label class="field"><span>From</span><select id="copy-from"></select></label>
+      </div>
+      <div id="copy-list" class="copy-list"></div>
+      <div class="field-row">
+        <label class="field"><span>Add to</span><select id="copy-to"></select></label>
+      </div>
+      <button class="btn primary block" id="copy-add" disabled>Add selected</button>
     </div>
   </div>
 </div>

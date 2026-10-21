@@ -328,7 +328,7 @@
       return `<div class="meal">
         <div class="meal-head"><h2>${m.label}</h2><span class="meal-kcal">${Math.round(kcal)} kcal</span></div>
         ${items}
-        <div class="meal-foot"><button class="btn ghost small" data-addmeal="${m.id}">+ Add food</button>${!list.length && dayEntries(addDays(currentDay, -1)).some((e) => e.meal === m.id) ? `<button class="btn ghost small" data-copymeal="${m.id}">Copy yesterday's ${m.label.toLowerCase()}</button>` : ""}</div>
+        <div class="meal-foot"><button class="btn ghost small" data-addmeal="${m.id}">+ Add food</button><button class="btn ghost small" data-copyfrom="${m.id}">Copy from…</button>${!list.length && dayEntries(addDays(currentDay, -1)).some((e) => e.meal === m.id) ? `<button class="btn ghost small" data-copymeal="${m.id}">Copy yesterday's ${m.label.toLowerCase()}</button>` : ""}</div>
       </div>`;
     }).join("");
   }
@@ -498,6 +498,8 @@
   $("#meals").addEventListener("click", (e) => {
     const add = e.target.closest("[data-addmeal]");
     if (add) return openPicker({ mode: "log", meal: add.dataset.addmeal });
+    const from = e.target.closest("[data-copyfrom]");
+    if (from) return openCopy(from.dataset.copyfrom);
     const copy = e.target.closest("[data-copymeal]");
     if (copy) {
       const meal = copy.dataset.copymeal;
@@ -528,6 +530,101 @@
   $("#meals").addEventListener("keydown", (e) => {
     const ed = e.target.closest("[data-edit]");
     if (ed && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); editEntry(ed.dataset.edit); }
+  });
+
+  // ---------- Copy food from another day ----------
+  let copySel = new Set();
+  const COPY_DAYS = [[-1, "Yesterday"], [-2, "2 days ago"], [-3, "3 days ago"], [-7, "1 week ago"]];
+  function openCopy(meal) {
+    const m = $("#copy-modal");
+    $("#copy-from").innerHTML = `<option value="all">All meals</option>` + mealOptions(meal);
+    $("#copy-to").innerHTML = `<option value="same">Same meal as that day</option>` + mealOptions(meal);
+    $("#copy-from").value = meal;
+    $("#copy-to").value = meal;
+    // Start on the most recent earlier day that has this meal logged (up to two weeks back), else yesterday.
+    let start = addDays(currentDay, -1);
+    for (let i = 1; i <= 14; i++) {
+      const k = addDays(currentDay, -i);
+      if (dayEntries(k).some((x) => x.meal === meal)) { start = k; break; }
+    }
+    $("#copy-date").value = start;
+    $("#copy-date").max = addDays(currentDay, -1);
+    m.hidden = false;
+    document.body.style.overflow = "hidden";
+    renderCopy(true);
+  }
+  // "yesterday" / "on Monday, Oct 19", for use inside a sentence
+  function dayPhrase(k) {
+    const l = dayLabel(k);
+    return ["Today", "Yesterday", "Tomorrow"].includes(l) ? l.toLowerCase() : `on ${l}`;
+  }
+  function closeCopy() {
+    $("#copy-modal").hidden = true;
+    document.body.style.overflow = "";
+  }
+  function copySource() {
+    const day = $("#copy-date").value;
+    const from = $("#copy-from").value;
+    return { day, list: day ? dayEntries(day).filter((x) => from === "all" || x.meal === from) : [] };
+  }
+  function renderCopy(selectAll) {
+    const { day, list } = copySource();
+    $("#copy-days").innerHTML = COPY_DAYS.map(([n, label]) => {
+      const k = addDays(currentDay, n);
+      return `<button class="chip" type="button" data-cday="${k}" aria-pressed="${k === day}">${label}</button>`;
+    }).join("");
+    if (selectAll) copySel = new Set(list.map((x) => x.id));
+    const from = $("#copy-from").value;
+    if (!list.length) {
+      const what = from === "all" ? "food" : MEALS.find((m) => m.id === from).label.toLowerCase();
+      $("#copy-list").innerHTML = `<div class="copy-empty">No ${what} logged ${day ? dayPhrase(day) : "that day"}. Pick another day.</div>`;
+    } else {
+      const groups = MEALS.filter((m) => list.some((x) => x.meal === m.id));
+      $("#copy-list").innerHTML = groups.map((m) => `${from === "all" ? `<div class="r-head">${m.label}</div>` : ""}` +
+        list.filter((x) => x.meal === m.id).map((x) => `
+          <label class="copy-row">
+            <input type="checkbox" data-cid="${x.id}" ${copySel.has(x.id) ? "checked" : ""}>
+            <span><b>${esc(x.name)}</b><small>${esc(x.amountText || "")}</small></span>
+            <span class="num">${Math.round(x.n.kcal)} kcal</span>
+          </label>`).join("")).join("");
+    }
+    const chosen = list.filter((x) => copySel.has(x.id));
+    const kcal = chosen.reduce((a, x) => a + x.n.kcal, 0);
+    const btn = $("#copy-add");
+    btn.disabled = !chosen.length;
+    btn.textContent = chosen.length ? `Add ${chosen.length} item${chosen.length === 1 ? "" : "s"} (${Math.round(kcal).toLocaleString()} kcal)` : "Add selected";
+  }
+  $$("#copy-modal [data-cclose]").forEach((b) => b.addEventListener("click", closeCopy));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#copy-modal").hidden) closeCopy(); });
+  $("#copy-days").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-cday]");
+    if (!b) return;
+    $("#copy-date").value = b.dataset.cday;
+    renderCopy(true);
+  });
+  $("#copy-date").addEventListener("change", () => renderCopy(true));
+  $("#copy-from").addEventListener("change", () => {
+    if ($("#copy-from").value === "all") $("#copy-to").value = "same";
+    else if ($("#copy-to").value === "same") $("#copy-to").value = $("#copy-from").value;
+    renderCopy(true);
+  });
+  $("#copy-list").addEventListener("change", (e) => {
+    const id = e.target.dataset.cid;
+    if (!id) return;
+    if (e.target.checked) copySel.add(id); else copySel.delete(id);
+    renderCopy(false);
+  });
+  $("#copy-add").addEventListener("click", () => {
+    const { day, list } = copySource();
+    const to = $("#copy-to").value;
+    const chosen = list.filter((x) => copySel.has(x.id));
+    if (!chosen.length) return;
+    const dest = state.log[currentDay] || (state.log[currentDay] = []);
+    for (const x of chosen) dest.push({ ...JSON.parse(JSON.stringify(x)), id: uid(), meal: to === "same" ? x.meal : to });
+    save();
+    closeCopy();
+    renderToday();
+    toast(`Copied ${chosen.length} item${chosen.length === 1 ? "" : "s"} from ${dayPhrase(day).replace(/^on /, "")}`);
   });
 
   function editEntry(id) {
@@ -1404,6 +1501,12 @@ ${note ? `The person adds: "${note}"\n` : ""}Reply with only JSON in this shape:
 {"items":[{"name":"Grilled chicken breast","portion":"about 1 piece (150 g)","grams":150,"kcal":248,"pro":46.5,"carb":0,"fat":5.4,"fib":0,"sug":0,"sat":1.5,"chol":128,"na":111}],"note":"one short sentence about confidence or assumptions"}
 Rules: values are totals for the portion shown, not per 100 g. kcal in kcal; pro, carb, fat, fib, sug, sat in grams; chol and na (sodium) in milligrams.
 Include visible sauces, dressings, oils and drinks as their own items. Use typical USDA values. If there is no food in the photo, return {"items":[],"note":"..."}.`;
+  const DESC_PROMPT = (text) => `You are estimating nutrition for a meal someone describes in words.
+Their description: "${text}"
+Split it into distinct foods and drinks. When a portion isn't given, assume a typical single adult serving and say what you assumed in the portion text. Account for cooking fats, sauces and toppings they mention.
+Reply with only JSON in this shape:
+{"items":[{"name":"Scrambled eggs","portion":"2 large eggs (about 120 g)","grams":120,"kcal":182,"pro":12.2,"carb":2,"fat":13.4,"fib":0,"sug":1.6,"sat":4,"chol":372,"na":340}],"note":"one short sentence about assumptions"}
+Rules: values are totals for the portion eaten, not per 100 g. kcal in kcal; pro, carb, fat, fib, sug, sat in grams; chol and na (sodium) in milligrams. Use typical USDA values; for restaurant or branded items use their published values if you know them. If the text doesn't describe food, return {"items":[],"note":"..."}.`;
 
   let photoItems = [];
   function setupPhoto() {
@@ -1448,9 +1551,17 @@ Include visible sauces, dressings, oils and drinks as their own items. Use typic
         wrap.append(img, rm);
         box.append(wrap);
       });
-      $("#photo-go").disabled = !photoFiles.length;
-      $("#photo-details").hidden = !photoFiles.length;
+      updateGo();
     }
+    function updateGo() {
+      const hasText = $("#photo-note").value.trim().length > 0;
+      $("#photo-go").disabled = !(photoFiles.length || hasText);
+      $("#photo-note-label").textContent = photoFiles.length ? "Details that help (optional)" : "Or describe what you ate";
+      $("#photo-note").placeholder = photoFiles.length
+        ? "e.g. cooked in olive oil, I ate about half"
+        : "e.g. 2 scrambled eggs with cheddar, 1 slice of whole wheat toast with butter, black coffee";
+    }
+    $("#photo-note").addEventListener("input", updateGo);
     function addFiles(list) {
       const picked = Array.from(list || []);
       const ok = picked.filter((f) => types.has(f.type) || (!f.type && /\.(jpe?g|png|webp|gif)$/i.test(f.name)));
@@ -1478,43 +1589,48 @@ Include visible sauces, dressings, oils and drinks as their own items. Use typic
 
     $("#photo-go").addEventListener("click", async () => {
       const files = photoFiles.slice();
-      if (!files.length) return;
-      $("#photo-msg").textContent = "Checking that photo estimates are available…";
+      const note = $("#photo-note").value.trim();
+      if (!files.length && !note) return;
+      $("#photo-msg").textContent = "Checking that estimates are available…";
       await ready;
-      if (!sample || !limits || !limits.images) {
-        $("#photo-msg").textContent = window.claude
-          ? "Photo estimates aren't available in this view of the app. Send the photo to Claude in your chat instead, and it will be added to your log here."
-          : "Photo estimates only work in the version hosted on claude.ai. Here, search for the foods instead.";
+      if (!sample || (files.length && (!limits || !limits.images))) {
+        $("#photo-msg").textContent = !window.claude
+          ? "Estimates only work in the version hosted on claude.ai. Here, search for the foods instead."
+          : files.length && sample
+            ? "Photo estimates aren't available in this view, but descriptions are. Remove the photo and describe the meal instead, or send the photo to Claude in your chat."
+            : "Estimates aren't available in this view of the app. Send the photo or description to Claude in your chat instead, and it will be added to your log here.";
         return;
       }
       ctl = new AbortController();
       $("#photo-go").disabled = true;
       $("#photo-stop").hidden = false;
       $("#photo-results").innerHTML = "";
-      $("#photo-msg").textContent = "Looking at your photo… this usually takes 10 to 40 seconds.";
+      $("#photo-msg").textContent = files.length ? "Looking at your photo… this usually takes 10 to 40 seconds." : "Working out the nutrition… this usually takes 10 to 30 seconds.";
       try {
-        const out = await sample.json(PHOTO_PROMPT($("#photo-note").value.trim()), { images: files, signal: ctl.signal });
+        const out = files.length
+          ? await sample.json(PHOTO_PROMPT(note), { images: files, signal: ctl.signal })
+          : await sample.json(DESC_PROMPT(note.slice(0, 2000)), { signal: ctl.signal });
         const items = (out && Array.isArray(out.items) ? out.items : []).filter((x) => x && x.name);
         photoItems = items.map((x) => {
           const n = zero();
           for (const k of NK) n[k] = Math.max(0, Number(x[k]) || 0);
           return { name: String(x.name).slice(0, 120), portion: String(x.portion || "1 portion").slice(0, 80), grams: Number(x.grams) > 0 ? Number(x.grams) : 0, n, on: true, mult: 1 };
         });
-        $("#photo-msg").textContent = photoItems.length ? (out.note ? String(out.note) : "") : (out && out.note ? String(out.note) : "No food found in that photo. Try a clearer or closer shot.");
+        $("#photo-msg").textContent = photoItems.length ? (out.note ? String(out.note) : "") : (out && out.note ? String(out.note) : files.length ? "No food found in that photo. Try a clearer or closer shot." : "No food found in that description. Try listing each food and roughly how much.");
         renderPhotoResults();
       } catch (e) {
         const code = e && e.code;
         $("#photo-msg").textContent =
           code === "cancelled" ? "Stopped." :
-          code === "not_granted" || code === "sampling_disabled" ? "Photo estimates need permission to use Claude. You can allow it from this page's permissions." :
+          code === "not_granted" || code === "sampling_disabled" ? "Estimates need permission to use Claude. You can allow it from this page's permissions." :
           code === "rate_limited" ? "Too many requests right now. Try again in a minute." :
           code === "image_rejected" ? "That image couldn't be read. Try a JPEG or PNG under 20 MB." :
           code === "invalid_json" ? "The estimate came back in an unexpected format. Press Estimate again." :
           "The estimate didn't finish. Press Estimate again.";
       } finally {
-        $("#photo-go").disabled = false;
         $("#photo-stop").hidden = true;
         ctl = null;
+        updateGo();
       }
     });
 
@@ -1544,7 +1660,7 @@ Include visible sauces, dressings, oils and drinks as their own items. Use typic
       photoFiles = [];
       renderThumbs();
       $("#photo-note").value = "";
-      $("#photo-go").disabled = true;
+      updateGo();
       $("#photo-msg").textContent = "";
       renderToday();
       toast(`Added ${count} item${count === 1 ? "" : "s"} to ${MEALS.find((m) => m.id === meal).label}`);
